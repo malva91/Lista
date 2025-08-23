@@ -377,7 +377,7 @@ body {
   z-index: 100;
   padding: var(--spacing-md);
   border-bottom: 2px solid var(--border-color);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
   /* Improve mobile performance */
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
@@ -390,6 +390,7 @@ body {
 @media (max-width: 480px) {
   .sticky-header {
     padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
   }
 
   .sticky-header .flex:not(.justify-between) {
