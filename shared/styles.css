@@ -392,23 +392,83 @@ body {
     padding: var(--spacing-sm);
   }
 
-  .sticky-header .flex {
+  .sticky-header .flex:not(.justify-between) {
     flex-direction: column;
     gap: var(--spacing-sm);
     align-items: stretch;
   }
 
-  .sticky-header .flex>div:first-child {
+  .sticky-header .flex:not(.justify-between)>div:first-child {
     text-align: center;
   }
 
-  .sticky-header .flex>div:last-child {
+  .sticky-header .flex:not(.justify-between)>div:last-child {
     display: flex;
     flex-wrap: wrap;
     gap: var(--spacing-sm);
     justify-content: center;
   }
 
+  /* Ottimizzazioni specifiche per layout justify-between su mobile */
+  .sticky-header .flex.justify-between {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    justify-content: space-between;
+  }
+
+  .sticky-header .flex.justify-between > div:first-child {
+    flex: 1;
+    min-width: 0;
+    padding-right: var(--spacing-sm);
+  }
+
+  .sticky-header .flex.justify-between > div:first-child h1 {
+    font-size: 1.1rem;
+    margin-bottom: 0.125rem;
+    line-height: 1.2;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .sticky-header .flex.justify-between > div:first-child p {
+    font-size: 0.8rem;
+    line-height: 1.3;
+    margin: 0;
+  }
+
+  .sticky-header .flex.justify-between > div:last-child {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    align-items: flex-end;
+    min-width: fit-content;
+  }
+
+  .sticky-header .flex.justify-between > div:last-child .btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.8rem;
+    min-height: 36px;
+    min-width: auto;
+    white-space: nowrap;
+  }
+  .sticky-header .flex.justify-between {
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .sticky-header .flex.justify-between > div:first-child {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sticky-header .flex.justify-between > div:last-child {
+    flex-shrink: 0;
+    justify-content: flex-end;
+    min-width: fit-content;
+  }
   .sticky-header h1 {
     font-size: 1.3rem;
     margin-bottom: 0.25rem;
@@ -1560,6 +1620,21 @@ body {
 
 /* Compact mode for very small screens */
 @media (max-width: 320px) {
+  .sticky-header .flex.justify-between > div:first-child h1 {
+    font-size: 1rem;
+    margin-bottom: 0.125rem;
+  }
+
+  .sticky-header .flex.justify-between > div:first-child p {
+    font-size: 0.75rem;
+  }
+
+  .sticky-header .flex.justify-between > div:last-child .btn {
+    padding: var(--spacing-xs);
+    font-size: 0.75rem;
+    min-height: 32px;
+  }
+
   .product-card {
     padding: var(--spacing-xs);
     min-height: 110px;
