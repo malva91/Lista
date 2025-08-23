@@ -1075,3 +1075,85 @@ export function cleanupCaches() {
   cachedSafeAreaInsets = null;
   cachedInputs = null;
 }
+
+// Theme Management
+export function initTheme() {
+  const savedTheme = localStorage.getItem('theme');
+  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  
+  // Set initial theme
+  if (savedTheme) {
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  } else if (!systemPrefersDark) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+  
+  // Create theme toggle button
+  createThemeToggle();
+  
+  // Listen for system theme changes
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem('theme')) {
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    }
+  });
+}
+
+function createThemeToggle() {
+  // Remove existing toggle if present
+  const existingToggle = document.querySelector('.theme-toggle');
+  if (existingToggle) {
+    existingToggle.remove();
+  }
+  
+  const toggle = document.createElement('button');
+  toggle.className = 'theme-toggle';
+  toggle.setAttribute('aria-label', 'Cambia tema');
+  toggle.setAttribute('title', 'Cambia tema');
+  
+  const updateToggleIcon = () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const isDark = currentTheme === 'dark' || (!currentTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    toggle.innerHTML = isDark ? '☀️' : '🌙';
+  };
+  
+  updateToggleIcon();
+  
+  toggle.addEventListener('click', () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const isDark = currentTheme === 'dark' || (!currentTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const newTheme = isDark ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateToggleIcon();
+    
+    // Show toast notification
+    showToast(`Tema ${newTheme === 'dark' ? 'scuro' : 'chiaro'} attivato`, 'success');
+  });
+  
+  document.body.appendChild(toggle);
+}
+
+export function getTheme() {
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme) return savedTheme;
+  
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+export function setTheme(theme) {
+  if (!['light', 'dark'].includes(theme)) {
+    console.warn('Tema non valido:', theme);
+    return;
+  }
+  
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  
+  // Update toggle icon if present
+  const toggle = document.querySelector('.theme-toggle');
+  if (toggle) {
+    toggle.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+  }
+}

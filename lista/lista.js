@@ -4,7 +4,7 @@ import {
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast, debounce , getContrastColor } from '../shared/utils.js';
-import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData } from '../shared/utils.js';
+import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme } from '../shared/utils.js';
 
 // Cache per migliorare le performance
 const listCache = new Map();
@@ -31,6 +31,9 @@ class ListaManager {
   async init() {
     // Initialize mobile utilities
     initMobileUtils();
+    
+    // Initialize theme
+    initTheme();
     
     // Preload critical data
     preloadCriticalData();

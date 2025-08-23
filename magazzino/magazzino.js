@@ -4,7 +4,7 @@ import {
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast } from '../shared/utils.js';
-import { safeQuerySelector, safeAddEventListener, validateInput, isMobile, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData } from '../shared/utils.js';
+import { safeQuerySelector, safeAddEventListener, validateInput, isMobile, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme } from '../shared/utils.js';
 
 // Cache per migliorare le performance
 const checklistCache = new Map();
@@ -33,6 +33,9 @@ class MagazzinoManager {
   async init() {
     // Initialize mobile utilities
     initMobileUtils();
+    
+    // Initialize theme
+    initTheme();
     
     // Preload critical data
     preloadCriticalData();

@@ -44,6 +44,37 @@
     <script>
         // Initialize mobile utilities on homepage
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize theme
+            if (typeof initTheme === 'function') {
+                initTheme();
+            } else {
+                // Fallback theme initialization
+                const savedTheme = localStorage.getItem('theme');
+                const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                
+                if (savedTheme) {
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+                } else if (!systemPrefersDark) {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+                
+                // Create simple theme toggle
+                const toggle = document.createElement('button');
+                toggle.className = 'theme-toggle';
+                toggle.setAttribute('aria-label', 'Cambia tema');
+                toggle.innerHTML = document.documentElement.getAttribute('data-theme') === 'light' ? '🌙' : '☀️';
+                
+                toggle.addEventListener('click', () => {
+                    const currentTheme = document.documentElement.getAttribute('data-theme');
+                    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                    document.documentElement.setAttribute('data-theme', newTheme);
+                    localStorage.setItem('theme', newTheme);
+                    toggle.innerHTML = newTheme === 'light' ? '🌙' : '☀️';
+                });
+                
+                document.body.appendChild(toggle);
+            }
+            
             // Preload critical resources
             const preloadScript = document.createElement('link');
             preloadScript.rel = 'modulepreload';
@@ -97,6 +128,10 @@
                 link.addEventListener('touchstart', preloadOnInteraction, { once: true });
             });
         });
+    </script>
+    <script type="module">
+        import { initTheme } from './shared/utils.js';
+        initTheme();
     </script>
 </body>
 </html>
