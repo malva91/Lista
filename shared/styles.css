@@ -1815,6 +1815,12 @@ body {
   padding: var(--spacing-xl);
   color: var(--text-secondary);
   position: relative;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(15, 17, 21, 0.9);
+  border-radius: var(--border-radius-lg);
+  margin: var(--spacing-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .loading::before {
@@ -1822,11 +1828,21 @@ body {
   display: inline-block;
   width: 40px;
   height: 40px;
-  border: 3px solid var(--border-color);
-  border-top: 3px solid var(--accent-primary);
+  border: 4px solid var(--border-color);
+  border-top: 4px solid var(--accent-primary);
+  border-right: 4px solid var(--accent-primary);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   margin-bottom: var(--spacing-md);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+.loading::after {
+  content: 'Caricamento in corso...';
+  display: block;
+  font-weight: 500;
+  color: var(--text-primary);
+  animation: pulse 2s ease-in-out infinite;
 }
 
 @keyframes spin {
@@ -1838,6 +1854,53 @@ body {
     transform: rotate(360deg);
   }
 }
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Skeleton loading for better UX */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: var(--border-radius);
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-text {
+  height: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-text:last-child {
+  width: 60%;
+}
+
+.skeleton-card {
+  height: 120px;
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Progressive loading states */
+.loading-state-1 .skeleton:nth-child(1) { animation-delay: 0s; }
+.loading-state-1 .skeleton:nth-child(2) { animation-delay: 0.1s; }
+.loading-state-1 .skeleton:nth-child(3) { animation-delay: 0.2s; }
+.loading-state-1 .skeleton:nth-child(4) { animation-delay: 0.3s; }
+.loading-state-1 .skeleton:nth-child(5) { animation-delay: 0.4s; }
 
 /* Enhanced form inputs */
 .form-input,

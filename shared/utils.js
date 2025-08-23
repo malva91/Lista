@@ -3,6 +3,192 @@
 // Cache per migliorare le performance
 const dateCache = new Map();
 const weekCache = new Map();
+const productCache = new Map();
+const categoryCache = new Map();
+
+// IndexedDB per cache persistente
+let dbCache = null;
+
+async function initIndexedDB() {
+  if (dbCache) return dbCache;
+  
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('ProductCacheDB', 1);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      dbCache = request.result;
+      resolve(dbCache);
+    };
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      
+      if (!db.objectStoreNames.contains('products')) {
+        const productStore = db.createObjectStore('products', { keyPath: 'id' });
+        productStore.createIndex('categoryId', 'categoryId', { unique: false });
+        productStore.createIndex('active', 'active', { unique: false });
+      }
+      
+      if (!db.objectStoreNames.contains('categories')) {
+        db.createObjectStore('categories', { keyPath: 'id' });
+      }
+      
+      if (!db.objectStoreNames.contains('metadata')) {
+        db.createObjectStore('metadata', { keyPath: 'key' });
+      }
+    };
+  });
+}
+
+export async function getCachedProducts() {
+  try {
+    const db = await initIndexedDB();
+    const transaction = db.transaction(['products', 'metadata'], 'readonly');
+    const productStore = transaction.objectStore('products');
+    const metadataStore = transaction.objectStore('metadata');
+    
+    const [products, metadata] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const request = productStore.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      }),
+      new Promise((resolve, reject) => {
+        const request = metadataStore.get('products_timestamp');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      })
+    ]);
+    
+    // Cache valida per 5 minuti
+    const isValid = metadata && (Date.now() - metadata.value) < 300000;
+    
+    return { products: products || [], isValid };
+  } catch (error) {
+    console.warn('Errore lettura cache IndexedDB:', error);
+    return { products: [], isValid: false };
+  }
+}
+
+export async function setCachedProducts(products) {
+  try {
+    const db = await initIndexedDB();
+    const transaction = db.transaction(['products', 'metadata'], 'readwrite');
+    const productStore = transaction.objectStore('products');
+    const metadataStore = transaction.objectStore('metadata');
+    
+    // Clear existing products
+    await new Promise((resolve, reject) => {
+      const request = productStore.clear();
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    
+    // Add new products in batches
+    const batchSize = 50;
+    for (let i = 0; i < products.length; i += batchSize) {
+      const batch = products.slice(i, i + batchSize);
+      await Promise.all(batch.map(product => 
+        new Promise((resolve, reject) => {
+          const request = productStore.add(product);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        })
+      ));
+    }
+    
+    // Update timestamp
+    await new Promise((resolve, reject) => {
+      const request = metadataStore.put({ key: 'products_timestamp', value: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    
+  } catch (error) {
+    console.warn('Errore scrittura cache IndexedDB:', error);
+  }
+}
+
+export async function getCachedCategories() {
+  try {
+    const db = await initIndexedDB();
+    const transaction = db.transaction(['categories', 'metadata'], 'readonly');
+    const categoryStore = transaction.objectStore('categories');
+    const metadataStore = transaction.objectStore('metadata');
+    
+    const [categories, metadata] = await Promise.all([
+      new Promise((resolve, reject) => {
+        const request = categoryStore.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      }),
+      new Promise((resolve, reject) => {
+        const request = metadataStore.get('categories_timestamp');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      })
+    ]);
+    
+    // Cache valida per 10 minuti
+    const isValid = metadata && (Date.now() - metadata.value) < 600000;
+    
+    return { categories: categories || [], isValid };
+  } catch (error) {
+    console.warn('Errore lettura cache categorie IndexedDB:', error);
+    return { categories: [], isValid: false };
+  }
+}
+
+export async function setCachedCategories(categories) {
+  try {
+    const db = await initIndexedDB();
+    const transaction = db.transaction(['categories', 'metadata'], 'readwrite');
+    const categoryStore = transaction.objectStore('categories');
+    const metadataStore = transaction.objectStore('metadata');
+    
+    // Clear existing categories
+    await new Promise((resolve, reject) => {
+      const request = categoryStore.clear();
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    
+    // Add new categories
+    await Promise.all(categories.map(category => 
+      new Promise((resolve, reject) => {
+        const request = categoryStore.add(category);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      })
+    ));
+    
+    // Update timestamp
+    await new Promise((resolve, reject) => {
+      const request = metadataStore.put({ key: 'categories_timestamp', value: Date.now() });
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    
+  } catch (error) {
+    console.warn('Errore scrittura cache categorie IndexedDB:', error);
+  }
+}
+
+// Preload critical data
+export function preloadCriticalData() {
+  // Preload in background
+  setTimeout(async () => {
+    try {
+      await Promise.all([
+        getCachedProducts(),
+        getCachedCategories()
+      ]);
+    } catch (error) {
+      console.warn('Errore preload dati:', error);
+    }
+  }, 100);
+}
 
 export function formatDate(date = new Date()) {
   const timestamp = date.getTime();

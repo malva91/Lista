@@ -4,7 +4,7 @@ import {
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast } from '../shared/utils.js';
-import { safeQuerySelector, safeAddEventListener, validateInput, isMobile, initMobileUtils } from '../shared/utils.js';
+import { safeQuerySelector, safeAddEventListener, validateInput, isMobile, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData } from '../shared/utils.js';
 
 // Cache per migliorare le performance
 const checklistCache = new Map();
@@ -34,24 +34,62 @@ class MagazzinoManager {
     // Initialize mobile utilities
     initMobileUtils();
     
+    // Preload critical data
+    preloadCriticalData();
+    
     this.setupDateSelector();
     this.setupEventListeners();
     
-    // Load data in parallel for better performance
-    const [categoriesResult, productsResult] = await Promise.allSettled([
-      this.loadCategories(),
-      this.loadProducts()
-    ]);
-    
-    if (categoriesResult.status === 'rejected') {
-      console.error('Errore caricamento categorie:', categoriesResult.reason);
-    }
-    if (productsResult.status === 'rejected') {
-      console.error('Errore caricamento prodotti:', productsResult.reason);
-    }
+    // Load data with optimized strategy
+    await this.loadDataOptimized();
     
     await this.loadCurrentList();
     await this.loadNotifications();
+  }
+  
+  async loadDataOptimized() {
+    try {
+      // Try to load from cache first
+      const [cachedCategories, cachedProducts] = await Promise.all([
+        getCachedCategories(),
+        getCachedProducts()
+      ]);
+      
+      // Use cached data if valid
+      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
+        this.categories = cachedCategories.categories;
+      }
+      
+      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
+        this.products = cachedProducts.products;
+      }
+      
+      // Load fresh data in background if cache is invalid or empty
+      const needsFreshCategories = !cachedCategories.isValid || cachedCategories.categories.length === 0;
+      const needsFreshProducts = !cachedProducts.isValid || cachedProducts.products.length === 0;
+      
+      if (needsFreshCategories || needsFreshProducts) {
+        const promises = [];
+        
+        if (needsFreshCategories) {
+          promises.push(this.loadCategories(true));
+        }
+        
+        if (needsFreshProducts) {
+          promises.push(this.loadProducts(true));
+        }
+        
+        await Promise.allSettled(promises);
+      }
+      
+    } catch (error) {
+      console.error('Errore caricamento dati ottimizzato:', error);
+      // Fallback to normal loading
+      await Promise.allSettled([
+        this.loadCategories(),
+        this.loadProducts()
+      ]);
+    }
   }
 
   // Throttled rendering per migliorare performance
@@ -119,45 +157,69 @@ class MagazzinoManager {
     }
   }
 
-  async loadCategories() {
+  async loadCategories(updateCache = false) {
     try {
+      // Use cached data if available and not updating
+      if (!updateCache && this.categories.length > 0) {
+        return;
+      }
+      
       const categoriesSnap = await getDocs(collection(db, 'categories'));
-      this.categories = categoriesSnap.docs.map(doc => ({
+      const newCategories = categoriesSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
       // Validazione dei dati delle categorie
-      this.categories = this.categories.filter(category => {
+      const validCategories = newCategories.filter(category => {
         if (!category.name || !category.colorHex) {
           console.warn('Categoria con dati mancanti ignorata:', category);
           return false;
         }
         return true;
       });
+      
+      this.categories = validCategories;
+      
+      // Update IndexedDB cache
+      if (updateCache) {
+        setCachedCategories(this.categories);
+      }
     } catch (error) {
       console.error('Errore caricamento categorie:', error);
       this.categories = [];
     }
   }
 
-  async loadProducts() {
+  async loadProducts(updateCache = false) {
     try {
+      // Use cached data if available and not updating
+      if (!updateCache && this.products.length > 0) {
+        return;
+      }
+      
       const productsQuery = query(collection(db, 'products'), where('active', '==', true));
       const productsSnap = await getDocs(productsQuery);
-      this.products = productsSnap.docs.map(doc => ({
+      const newProducts = productsSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })).sort((a, b) => a.name.localeCompare(b.name));
       
       // Validazione dei dati dei prodotti
-      this.products = this.products.filter(product => {
+      const validProducts = newProducts.filter(product => {
         if (!product.name || !product.categoryId) {
           console.warn('Prodotto con dati mancanti ignorato:', product);
           return false;
         }
         return true;
       });
+      
+      this.products = validProducts;
+      
+      // Update IndexedDB cache
+      if (updateCache) {
+        setCachedProducts(this.products);
+      }
     } catch (error) {
       console.error('Errore caricamento prodotti:', error);
       this.products = [];

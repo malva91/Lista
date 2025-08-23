@@ -44,13 +44,24 @@
     <script>
         // Initialize mobile utilities on homepage
         document.addEventListener('DOMContentLoaded', function() {
+            // Preload critical resources
+            const preloadScript = document.createElement('link');
+            preloadScript.rel = 'modulepreload';
+            preloadScript.href = 'shared/utils.js';
+            document.head.appendChild(preloadScript);
+            
+            const preloadFirebase = document.createElement('link');
+            preloadFirebase.rel = 'modulepreload';
+            preloadFirebase.href = 'shared/firebase.js';
+            document.head.appendChild(preloadFirebase);
+            
             // Add loading states to buttons
             const buttons = document.querySelectorAll('.btn');
             buttons.forEach(button => {
                 button.addEventListener('click', function(e) {
                     if (this.href) {
                         this.style.opacity = '0.7';
-                        this.innerHTML = '⏳ Caricamento...';
+                        this.innerHTML = '<span style="display: inline-block; animation: spin 1s linear infinite;">⏳</span> Caricamento...';
                     }
                 });
             });
@@ -65,6 +76,25 @@
                 card.addEventListener('touchend', function() {
                     this.style.transform = '';
                 });
+            });
+            
+            // Preload next page resources on hover/touch
+            const links = document.querySelectorAll('a[href]');
+            links.forEach(link => {
+                const preloadOnInteraction = () => {
+                    const href = link.getAttribute('href');
+                    if (href && !href.startsWith('http')) {
+                        // Preload the main script of the target page
+                        const scriptPreload = document.createElement('link');
+                        scriptPreload.rel = 'modulepreload';
+                        scriptPreload.href = href + (href.endsWith('/') ? '' : '/') + 
+                                           href.split('/').filter(Boolean).pop() + '.js';
+                        document.head.appendChild(scriptPreload);
+                    }
+                };
+                
+                link.addEventListener('mouseenter', preloadOnInteraction, { once: true });
+                link.addEventListener('touchstart', preloadOnInteraction, { once: true });
             });
         });
     </script>
