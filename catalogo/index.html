@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <title>Gestione Catalogo - Prodotti</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <div class="sticky-header">
+        <div class="container">
+            <div class="flex justify-between">
+                <div>
+                    <h1>📋 Gestione Catalogo</h1>
+                    <p class="text-secondary">Gestisci prodotti e categorie</p>
+                </div>
+                <div class="flex">
+                    <button id="exportBtn" class="btn btn-warning">📥 Esporta JSON</button>
+                    <label class="btn btn-success" style="cursor: pointer;">
+                        📤 Importa JSON
+                        <input type="file" id="importFile" accept=".json" style="display: none;">
+                    </label>
+                    <a href="../" class="btn btn-secondary">← Home</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="grid grid-2 mb-4">
+            <!-- Sezione Categorie -->
+            <div class="product-card">
+                <h2 class="mb-3">📁 Categorie</h2>
+                
+                <div class="form-group">
+                    <input type="text" id="categoryName" class="form-input" placeholder="Nome categoria">
+                </div>
+                <div class="form-group">
+                    <input type="color" id="categoryColor" class="form-input" value="#3b82f6">
+                </div>
+                <div class="flex mb-3">
+                    <button id="addCategoryBtn" class="btn btn-primary">Aggiungi Categoria</button>
+                    <button id="updateCategoryBtn" class="btn btn-warning hidden">Aggiorna Categoria</button>
+                    <button id="cancelCategoryBtn" class="btn btn-secondary hidden">Annulla</button>
+                </div>
+                
+                <div id="categoriesList"></div>
+            </div>
+
+            <!-- Sezione Prodotti -->
+            <div class="product-card">
+                <h2 class="mb-3">📦 Prodotti</h2>
+                
+                <div class="form-group">
+                    <input type="text" id="productName" class="form-input" placeholder="Nome prodotto">
+                </div>
+                <div class="form-group">
+                    <select id="productCategory" class="form-select">
+                        <option value="">Seleziona categoria</option>
+                    </select>
+                </div>
+                <div class="flex mb-3">
+                    <label class="flex" style="align-items: center;">
+                        <input type="checkbox" id="productImportant" style="margin-right: 0.5rem;">
+                        Prodotto importante
+                    </label>
+                    <label class="flex" style="align-items: center;">
+                        <input type="checkbox" id="productActive" checked style="margin-right: 0.5rem;">
+                        Prodotto attivo
+                    </label>
+                </div>
+                <div class="flex mb-3">
+                    <button id="addProductBtn" class="btn btn-primary">Aggiungi Prodotto</button>
+                    <button id="updateProductBtn" class="btn btn-warning hidden">Aggiorna Prodotto</button>
+                    <button id="cancelProductBtn" class="btn btn-secondary hidden">Annulla</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ricerca e Filtri -->
+        <div class="search-input">
+            <input type="text" id="searchInput" class="form-input" placeholder="🔍 Cerca prodotti...">
+            <div class="flex flex-wrap mt-2" id="categoryFilters"></div>
+        </div>
+
+        <div id="loadingProducts" class="loading">Caricamento prodotti...</div>
+        <div id="errorMessage" class="error hidden"></div>
+        <div id="successMessage" class="success hidden"></div>
+        
+        <div id="productsList"></div>
+    </div>
+
+    <script type="module" src="catalogo.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="format-detection" content="telephone=no">
+    <title>Gestione Liste Prodotti</title>
+    <link rel="stylesheet" href="shared/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🏪 Gestione Liste Prodotti</h1>
+            <p class="subtitle">Scegli la tua area di lavoro</p>
+        </header>
+        
+        <main class="main-menu">
+            <div class="menu-card">
+                <div class="menu-icon">📝</div>
+                <h2>Lista Dipendenti</h2>
+                <p>Compila la lista giornaliera dei prodotti richiesti</p>
+                <a href="lista/" class="btn btn-primary">Vai alla Lista</a>
+            </div>
+            
+            <div class="menu-card">
+                <div class="menu-icon">📦</div>
+                <h2>Magazzino</h2>
+                <p>Visualizza liste e gestisci checklist prodotti preparati</p>
+                <a href="magazzino/" class="btn btn-success">Vai al Magazzino</a>
+            </div>
+            
+            <div class="menu-card">
+                <div class="menu-icon">📋</div>
+                <h2>Gestione Catalogo</h2>
+                <p>Aggiungi, modifica ed elimina prodotti e categorie</p>
+                <a href="catalogo/" class="btn btn-warning">Gestisci Catalogo</a>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Initialize mobile utilities on homepage
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add loading states to buttons
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    if (this.href) {
+                        this.style.opacity = '0.7';
+                        this.innerHTML = '⏳ Caricamento...';
+                    }
+                });
+            });
+            
+            // Add touch feedback
+            const cards = document.querySelectorAll('.menu-card');
+            cards.forEach(card => {
+                card.addEventListener('touchstart', function() {
+                    this.style.transform = 'scale(0.98)';
+                });
+                
+                card.addEventListener('touchend', function() {
+                    this.style.transform = '';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="format-detection" content="telephone=no">
+    <title>Magazzino - Gestione Prodotti</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <div class="sticky-header">
+        <div class="container">
+            <div class="flex justify-between">
+                <div>
+                    <h1>📦 Magazzino</h1>
+                    <p id="currentDate" class="text-secondary">Oggi</p>
+                </div>
+                <div class="flex">
+                    <input type="date" id="dateSelector" class="form-input" style="width: auto;">
+                    <a href="../" class="btn btn-secondary">← Home</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="notificationPanel" class="notification-panel hidden">
+            <div class="notification-header">
+                <h3>🔔 Notifiche</h3>
+                <div class="flex">
+                    <span id="notificationBadge" class="notification-badge">0 non lette</span>
+                    <button id="markAllReadBtn" class="btn btn-secondary" style="margin-left: 1rem; padding: 0.5rem 1rem;">Segna tutte come lette</button>
+                </div>
+            </div>
+            <div id="notificationList" class="notification-list"></div>
+        </div>
+
+        <div id="loadingList" class="loading">Caricamento lista...</div>
+        <div id="errorMessage" class="error hidden"></div>
+        
+        <div id="checklistContainer" class="hidden"></div>
+        <div id="emptyState" class="text-center p-4 hidden">
+            <p class="text-secondary">Nessuna lista trovata per questa data</p>
+        </div>
+    </div>
+
+    <script type="module" src="magazzino.js"></script>
+</body>
+</html>

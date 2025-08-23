@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="format-detection" content="telephone=no">
+    <title>Lista Dipendenti - Gestione Prodotti</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <div class="sticky-header">
+        <div class="container">
+            <div class="flex justify-between">
+                <div>
+                    <h1>📝 Lista Dipendenti</h1>
+                    <p id="currentDate" class="text-secondary">Oggi</p>
+                </div>
+                <div class="flex">
+                    <input type="date" id="dateSelector" class="form-input" style="width: auto;">
+                    <a href="../" class="btn btn-secondary">← Home</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="search-input">
+            <input type="text" id="searchInput" class="form-input" placeholder="🔍 Cerca prodotti...">
+            <div class="flex flex-wrap mt-2" id="categoryFilters"></div>
+        </div>
+
+        <div id="loadingProducts" class="loading">Caricamento prodotti...</div>
+        <div id="errorMessage" class="error hidden"></div>
+        
+        <div class="flex justify-between mb-3">
+            <h2>📝 Lista Prodotti</h2>
+            <button id="deleteListBtn" class="btn btn-error" style="padding: 0.5rem 1rem;">
+                🗑️ Elimina Lista (Test)
+            </button>
+        </div>
+        
+        <div id="productsList" class="hidden"></div>
+
+        <div class="product-card">
+            <h3>➕ Prodotti Extra</h3>
+            <p class="text-secondary mb-3">Aggiungi prodotti non presenti nel catalogo</p>
+            <div class="flex mb-2">
+                <input type="text" id="extraName" class="form-input" placeholder="Nome prodotto extra" style="flex: 1;">
+                <input type="number" id="extraQty" class="form-input" placeholder="Qtà" min="1" style="width: 80px; margin-left: 0.5rem;">
+                <button id="addExtraBtn" class="btn btn-primary" style="margin-left: 0.5rem;">Aggiungi</button>
+            </div>
+            <div id="extrasList"></div>
+        </div>
+
+        <div class="sticky-bottom" style="position: sticky; bottom: 0; background: var(--bg-primary); padding: 1rem 0; border-top: 2px solid var(--border-color); margin-top: 2rem;">
+            <div class="flex justify-between">
+                <button id="saveDraftBtn" class="btn btn-secondary">💾 Salva Bozza</button>
+                <button id="submitBtn" class="btn btn-success">✅ Invia Lista</button>
+            </div>
+            <div id="validationMessage" class="error hidden mt-2"></div>
+            <div id="successMessage" class="success hidden mt-2"></div>
+        </div>
+    </div>
+
+    <script type="module" src="lista.js"></script>
+</body>
+</html>
