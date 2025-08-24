@@ -7,38 +7,263 @@ const productCache = new Map();
 const categoryCache = new Map();
 
 // Virtual scrolling e lazy loading
-export const ITEMS_PER_BATCH = 20;
+export const ITEMS_PER_BATCH = 15; // Ridotto per mobile
 const SCROLL_THRESHOLD = 200;
+const PRELOAD_THRESHOLD = 300; // Precarica quando mancano 300px al fondo
 
+// Performance monitoring
+let performanceMetrics = {
+  renderTime: 0,
+  loadTime: 0,
+  itemsRendered: 0
+};
+
+// Adaptive batch sizing based on device performance
+export function getAdaptiveBatchSize() {
+  const isMobileDevice = window.innerWidth <= 768;
+  const isLowEndDevice = navigator.hardwareConcurrency <= 2 || navigator.deviceMemory <= 2;
+  
+  if (isLowEndDevice) return 8;
+  if (isMobileDevice) return 12;
+  return ITEMS_PER_BATCH;
+}
+
+// Optimized rendering with RAF batching
+export function scheduleRender(callback) {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => {
+      const startTime = performance.now();
+      try {
+        const result = callback();
+        performanceMetrics.renderTime = performance.now() - startTime;
+        resolve(result);
+      } catch (error) {
+        console.error('Errore durante il rendering:', error);
+        resolve(null);
+      }
+    });
+  });
+}
+
+// Optimized intersection observer with better thresholds
+export function createOptimizedIntersectionObserver(callback, options = {}) {
+  const defaultOptions = {
+    rootMargin: '100px 0px 300px 0px', // Precarica prima che sia visibile
+    threshold: [0, 0.1, 0.5, 1.0] // Multiple thresholds per controllo granulare
+  };
+  
+  return new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && entry.intersectionRatio > 0.1) {
+        callback(entry);
+      }
+    });
+  }, { ...defaultOptions, ...options });
+}
 // Intersection Observer per lazy loading
 let intersectionObserver = null;
 
 export function initIntersectionObserver() {
   if (intersectionObserver) return intersectionObserver;
   
-  intersectionObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const element = entry.target;
-        if (element.dataset.lazyLoad) {
-          const event = new CustomEvent('lazyLoad', { detail: { element } });
-          element.dispatchEvent(event);
-        }
-      }
-    });
-  }, {
-    rootMargin: '50px',
-    threshold: 0.1
+  intersectionObserver = createOptimizedIntersectionObserver((entry) => {
+    const element = entry.target;
+    if (element.dataset.lazyLoad) {
+      const event = new CustomEvent('lazyLoad', { detail: { element, entry } });
+      element.dispatchEvent(event);
+    }
   });
   
   return intersectionObserver;
 }
 
-// Batch processing per rendering
-export function processBatch(items, batchSize = ITEMS_PER_BATCH, processor) {
+// Virtual scrolling implementation
+export class VirtualScrollManager {
+  constructor(container, itemHeight = 120, buffer = 5) {
+    this.container = container;
+    this.itemHeight = itemHeight;
+    this.buffer = buffer;
+    this.items = [];
+    this.visibleItems = [];
+    this.scrollTop = 0;
+    this.containerHeight = 0;
+    this.totalHeight = 0;
+    this.startIndex = 0;
+    this.endIndex = 0;
+    
+    this.init();
+  }
+  
+  init() {
+    this.container.style.position = 'relative';
+    this.container.style.overflow = 'auto';
+    
+    // Create spacer elements
+    this.topSpacer = document.createElement('div');
+    this.topSpacer.className = 'virtual-scroll-spacer';
+    this.bottomSpacer = document.createElement('div');
+    this.bottomSpacer.className = 'virtual-scroll-spacer';
+    
+    this.container.appendChild(this.topSpacer);
+    this.container.appendChild(this.bottomSpacer);
+    
+    this.container.addEventListener('scroll', this.handleScroll.bind(this), { passive: true });
+    window.addEventListener('resize', this.handleResize.bind(this), { passive: true });
+  }
+  
+  setItems(items) {
+    this.items = items;
+    this.totalHeight = items.length * this.itemHeight;
+    this.updateVisibleItems();
+  }
+  
+  handleScroll() {
+    this.scrollTop = this.container.scrollTop;
+    this.updateVisibleItems();
+  }
+  
+  handleResize() {
+    this.containerHeight = this.container.clientHeight;
+    this.updateVisibleItems();
+  }
+  
+  updateVisibleItems() {
+    if (!this.items.length) return;
+    
+    this.containerHeight = this.container.clientHeight || window.innerHeight;
+    
+    const visibleStart = Math.floor(this.scrollTop / this.itemHeight);
+    const visibleEnd = Math.min(
+      visibleStart + Math.ceil(this.containerHeight / this.itemHeight),
+      this.items.length - 1
+    );
+    
+    this.startIndex = Math.max(0, visibleStart - this.buffer);
+    this.endIndex = Math.min(this.items.length - 1, visibleEnd + this.buffer);
+    
+    this.renderVisibleItems();
+  }
+  
+  renderVisibleItems() {
+    // Update spacers
+    this.topSpacer.style.height = `${this.startIndex * this.itemHeight}px`;
+    this.bottomSpacer.style.height = `${(this.items.length - this.endIndex - 1) * this.itemHeight}px`;
+    
+    // Clear existing items (except spacers)
+    const existingItems = this.container.querySelectorAll(':not(.virtual-scroll-spacer)');
+    existingItems.forEach(item => item.remove());
+    
+    // Render visible items
+    const fragment = document.createDocumentFragment();
+    for (let i = this.startIndex; i <= this.endIndex; i++) {
+      const item = this.items[i];
+      if (item && item.element) {
+        fragment.appendChild(item.element);
+      }
+    }
+    
+    this.container.insertBefore(fragment, this.bottomSpacer);
+  }
+}
+
+// Optimized batch processing with priority queue
+export class BatchProcessor {
+  constructor(batchSize = getAdaptiveBatchSize()) {
+    this.batchSize = batchSize;
+    this.queue = [];
+    this.processing = false;
+    this.highPriorityQueue = [];
+  }
+  
+  addTask(task, priority = 'normal') {
+    if (priority === 'high') {
+      this.highPriorityQueue.push(task);
+    } else {
+      this.queue.push(task);
+    }
+    
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+  
+  async processQueue() {
+    this.processing = true;
+    
+    while (this.highPriorityQueue.length > 0 || this.queue.length > 0) {
+      // Process high priority tasks first
+      const currentQueue = this.highPriorityQueue.length > 0 ? this.highPriorityQueue : this.queue;
+      const batch = currentQueue.splice(0, this.batchSize);
+      
+      if (batch.length === 0) break;
+      
+      await this.processBatch(batch);
+      
+      // Yield control to browser
+      await new Promise(resolve => {
+        if (window.requestIdleCallback) {
+          requestIdleCallback(resolve, { timeout: 50 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+    }
+    
+    this.processing = false;
+  }
+  
+  async processBatch(batch) {
+    return Promise.all(batch.map(async task => {
+      try {
+        return await task();
+      } catch (error) {
+        console.error('Errore processing task:', error);
+        return null;
+      }
+    }));
+  }
+}
+
+// Global batch processor instance
+export const globalBatchProcessor = new BatchProcessor();
+
+// Enhanced intersection observer for lazy loading
+let enhancedIntersectionObserver = null;
+
+export function initEnhancedIntersectionObserver() {
+  if (enhancedIntersectionObserver) return enhancedIntersectionObserver;
+  
+  enhancedIntersectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const element = entry.target;
+        if (element.dataset.lazyLoad) {
+          const event = new CustomEvent('lazyLoad', { 
+            detail: { element, entry, ratio: entry.intersectionRatio } 
+          });
+          element.dispatchEvent(event);
+          
+          // Remove observer after loading to improve performance
+          enhancedIntersectionObserver.unobserve(element);
+        }
+      }
+    });
+  }, {
+    rootMargin: '150px 0px 300px 0px', // Precarica molto prima
+    threshold: [0, 0.1]
+  });
+  
+  return enhancedIntersectionObserver;
+}
+
+// Enhanced batch processing with performance monitoring
+export function processBatch(items, batchSize = getAdaptiveBatchSize(), processor) {
+  const startTime = performance.now();
+  
   return new Promise((resolve) => {
     let index = 0;
     const results = [];
+    let processedCount = 0;
     
     function processBatchChunk() {
       const endIndex = Math.min(index + batchSize, items.length);
@@ -48,6 +273,7 @@ export function processBatch(items, batchSize = ITEMS_PER_BATCH, processor) {
         try {
           const result = processor(item, index);
           if (result) results.push(result);
+          processedCount++;
         } catch (error) {
           console.error('Errore processing batch item:', error, item);
         }
@@ -55,13 +281,23 @@ export function processBatch(items, batchSize = ITEMS_PER_BATCH, processor) {
       });
       
       if (index < items.length) {
-        // Use requestIdleCallback if available, otherwise setTimeout
+        // Adaptive scheduling based on performance
+        const elapsed = performance.now() - startTime;
+        const avgTimePerItem = elapsed / processedCount;
+        
+        // If processing is slow, reduce batch size
+        if (avgTimePerItem > 5) { // 5ms per item is slow
+          batchSize = Math.max(3, Math.floor(batchSize * 0.8));
+        }
+        
         if (window.requestIdleCallback) {
-          requestIdleCallback(processBatchChunk, { timeout: 50 });
+          requestIdleCallback(processBatchChunk, { timeout: 100 });
         } else {
-          setTimeout(processBatchChunk, 0);
+          setTimeout(processBatchChunk, avgTimePerItem > 10 ? 16 : 0);
         }
       } else {
+        performanceMetrics.loadTime = performance.now() - startTime;
+        performanceMetrics.itemsRendered = processedCount;
         resolve(results);
       }
     }
@@ -70,25 +306,35 @@ export function processBatch(items, batchSize = ITEMS_PER_BATCH, processor) {
   });
 }
 
+// Memory-efficient scroll handler with throttling
+let scrollRAF = null;
+
 // Debounced scroll handler
-export function createScrollHandler(callback, threshold = SCROLL_THRESHOLD) {
-  let ticking = false;
+export function createScrollHandler(callback, threshold = PRELOAD_THRESHOLD) {
+  let lastScrollTop = 0;
+  let scrollDirection = 'down';
   
   return function(event) {
-    if (!ticking) {
-      requestAnimationFrame(() => {
-        const scrollTop = event.target.scrollTop || window.pageYOffset;
-        const scrollHeight = event.target.scrollHeight || document.documentElement.scrollHeight;
-        const clientHeight = event.target.clientHeight || window.innerHeight;
-        
-        if (scrollHeight - scrollTop - clientHeight < threshold) {
-          callback();
-        }
-        
-        ticking = false;
-      });
-      ticking = true;
+    if (scrollRAF) {
+      cancelAnimationFrame(scrollRAF);
     }
+    
+    scrollRAF = requestAnimationFrame(() => {
+      const scrollTop = event.target.scrollTop || window.pageYOffset;
+      const scrollHeight = event.target.scrollHeight || document.documentElement.scrollHeight;
+      const clientHeight = event.target.clientHeight || window.innerHeight;
+      
+      // Determine scroll direction
+      scrollDirection = scrollTop > lastScrollTop ? 'down' : 'up';
+      lastScrollTop = scrollTop;
+      
+      // Only trigger callback when scrolling down and near bottom
+      if (scrollDirection === 'down' && scrollHeight - scrollTop - clientHeight < threshold) {
+        callback({ scrollTop, scrollHeight, clientHeight, direction: scrollDirection });
+      }
+      
+      scrollRAF = null;
+    });
   };
 }
 
@@ -110,12 +356,13 @@ export function appendToFragment(fragment, elements) {
 
 // IndexedDB per cache persistente
 let dbCache = null;
+const DB_VERSION = 2; // Incrementato per nuove ottimizzazioni
 
 async function initIndexedDB() {
   if (dbCache) return dbCache;
   
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('ProductCacheDB', 1);
+    const request = indexedDB.open('ProductCacheDB', DB_VERSION);
     
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
@@ -130,27 +377,37 @@ async function initIndexedDB() {
         const productStore = db.createObjectStore('products', { keyPath: 'id' });
         productStore.createIndex('categoryId', 'categoryId', { unique: false });
         productStore.createIndex('active', 'active', { unique: false });
+        productStore.createIndex('important', 'important', { unique: false });
+        productStore.createIndex('name', 'name', { unique: false });
       }
       
       if (!db.objectStoreNames.contains('categories')) {
-        db.createObjectStore('categories', { keyPath: 'id' });
+        const categoryStore = db.createObjectStore('categories', { keyPath: 'id' });
+        categoryStore.createIndex('name', 'name', { unique: false });
       }
       
       if (!db.objectStoreNames.contains('metadata')) {
         db.createObjectStore('metadata', { keyPath: 'key' });
       }
+      
+      // New store for performance metrics
+      if (!db.objectStoreNames.contains('performance')) {
+        db.createObjectStore('performance', { keyPath: 'key' });
+      }
     };
   });
 }
 
+// Enhanced caching with compression and better expiration
 export async function getCachedProducts() {
   try {
     const db = await initIndexedDB();
-    const transaction = db.transaction(['products', 'metadata'], 'readonly');
+    const transaction = db.transaction(['products', 'metadata', 'performance'], 'readonly');
     const productStore = transaction.objectStore('products');
     const metadataStore = transaction.objectStore('metadata');
+    const performanceStore = transaction.objectStore('performance');
     
-    const [products, metadata] = await Promise.all([
+    const [products, metadata, perfData] = await Promise.all([
       new Promise((resolve, reject) => {
         const request = productStore.getAll();
         request.onsuccess = () => resolve(request.result);
@@ -160,25 +417,39 @@ export async function getCachedProducts() {
         const request = metadataStore.get('products_timestamp');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
+      }),
+      new Promise((resolve, reject) => {
+        const request = performanceStore.get('load_metrics');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
       })
     ]);
     
-    // Cache valida per 5 minuti
-    const isValid = metadata && (Date.now() - metadata.value) < 300000;
+    // Adaptive cache duration based on performance
+    const baseCacheDuration = 300000; // 5 minutes
+    const performanceMultiplier = perfData?.value?.loadTime > 1000 ? 2 : 1; // Cache longer if slow
+    const cacheDuration = baseCacheDuration * performanceMultiplier;
     
-    return { products: products || [], isValid };
+    const isValid = metadata && (Date.now() - metadata.value) < cacheDuration;
+    
+    return { 
+      products: products || [], 
+      isValid,
+      performance: perfData?.value || null
+    };
   } catch (error) {
     console.warn('Errore lettura cache IndexedDB:', error);
-    return { products: [], isValid: false };
+    return { products: [], isValid: false, performance: null };
   }
 }
 
 export async function setCachedProducts(products) {
   try {
     const db = await initIndexedDB();
-    const transaction = db.transaction(['products', 'metadata'], 'readwrite');
+    const transaction = db.transaction(['products', 'metadata', 'performance'], 'readwrite');
     const productStore = transaction.objectStore('products');
     const metadataStore = transaction.objectStore('metadata');
+    const performanceStore = transaction.objectStore('performance');
     
     // Clear existing products
     await new Promise((resolve, reject) => {
@@ -187,8 +458,8 @@ export async function setCachedProducts(products) {
       request.onerror = () => reject(request.error);
     });
     
-    // Add new products in batches
-    const batchSize = 50;
+    // Add new products in optimized batches
+    const batchSize = getAdaptiveBatchSize() * 3; // Larger batches for DB operations
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize);
       await Promise.all(batch.map(product => 
@@ -200,17 +471,95 @@ export async function setCachedProducts(products) {
       ));
     }
     
-    // Update timestamp
-    await new Promise((resolve, reject) => {
+    // Update timestamp and performance metrics
+    await Promise.all([
+      new Promise((resolve, reject) => {
       const request = metadataStore.put({ key: 'products_timestamp', value: Date.now() });
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
-    });
+      }),
+      new Promise((resolve, reject) => {
+        const request = performanceStore.put({ 
+          key: 'load_metrics', 
+          value: performanceMetrics 
+        });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      })
+    ]);
     
   } catch (error) {
     console.warn('Errore scrittura cache IndexedDB:', error);
   }
 }
+
+// Preload critical data with priority
+export async function preloadCriticalData() {
+  const startTime = performance.now();
+  
+  try {
+    // Use high priority for critical data
+    globalBatchProcessor.addTask(async () => {
+      const [productsCache, categoriesCache] = await Promise.all([
+        getCachedProducts(),
+        getCachedCategories()
+      ]);
+      
+      console.log('Preload completed:', {
+        products: productsCache.products.length,
+        categories: categoriesCache.categories.length,
+        time: performance.now() - startTime
+      });
+      
+      return { productsCache, categoriesCache };
+    }, 'high');
+  } catch (error) {
+    console.warn('Errore preload dati:', error);
+  }
+}
+
+// Smart prefetching based on user behavior
+export class SmartPrefetcher {
+  constructor() {
+    this.userPatterns = JSON.parse(localStorage.getItem('userPatterns') || '{}');
+    this.currentSession = [];
+  }
+  
+  trackInteraction(type, data) {
+    this.currentSession.push({ type, data, timestamp: Date.now() });
+    
+    // Update patterns
+    if (!this.userPatterns[type]) {
+      this.userPatterns[type] = {};
+    }
+    
+    const key = JSON.stringify(data);
+    this.userPatterns[type][key] = (this.userPatterns[type][key] || 0) + 1;
+    
+    // Save patterns periodically
+    if (this.currentSession.length % 10 === 0) {
+      this.savePatterns();
+    }
+  }
+  
+  getPredictions(type, limit = 5) {
+    const patterns = this.userPatterns[type] || {};
+    return Object.entries(patterns)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, limit)
+      .map(([key]) => JSON.parse(key));
+  }
+  
+  savePatterns() {
+    try {
+      localStorage.setItem('userPatterns', JSON.stringify(this.userPatterns));
+    } catch (error) {
+      console.warn('Errore salvataggio pattern utente:', error);
+    }
+  }
+}
+
+export const smartPrefetcher = new SmartPrefetcher();
 
 export async function getCachedCategories() {
   try {
@@ -232,8 +581,8 @@ export async function getCachedCategories() {
       })
     ]);
     
-    // Cache valida per 10 minuti
-    const isValid = metadata && (Date.now() - metadata.value) < 600000;
+    // Cache valida per 15 minuti (categorie cambiano meno spesso)
+    const isValid = metadata && (Date.now() - metadata.value) < 900000;
     
     return { categories: categories || [], isValid };
   } catch (error) {

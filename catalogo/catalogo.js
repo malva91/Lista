@@ -3,7 +3,12 @@ import {
   collection, doc, getDocs, getDoc, setDoc, deleteDoc, addDoc, updateDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { generateUniqueId, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.2.0';
-import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.2.0';
+import { 
+  safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu,
+  getAdaptiveBatchSize, scheduleRender, globalBatchProcessor, smartPrefetcher,
+  getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories,
+  preloadCriticalData, initEnhancedIntersectionObserver, createScrollHandler
+} from '../shared/utils.js?v=1.2.0';
 
 class CatalogoManager {
   constructor() {
@@ -20,6 +25,7 @@ class CatalogoManager {
     this.editingCategory = null;
     this.editingProduct = null;
     this.intersectionObserver = null;
+    this.loadingIndicator = null;
     
     this.init();
   }
@@ -29,29 +35,78 @@ class CatalogoManager {
     initTheme();
     initHamburgerMenu();
     
-    // Initialize intersection observer for lazy loading
-    this.intersectionObserver = initIntersectionObserver();
+    // Initialize enhanced intersection observer
+    this.intersectionObserver = initEnhancedIntersectionObserver();
+    
+    // Preload critical data
+    preloadCriticalData();
     
     this.setupEventListeners();
     
-    document.getElementById('loadingProducts').classList.remove('hidden');
+    this.showLoadingState();
     
-    await this.loadDataWithProgress();
+    await this.loadDataOptimized();
     this.filterAndRenderProducts();
   }
   
-  async loadDataWithProgress() {
+  showLoadingState() {
     const loadingEl = document.getElementById('loadingProducts');
+    if (loadingEl) {
+      loadingEl.classList.remove('hidden');
+      loadingEl.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
+          <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid var(--border-color); border-top: 4px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;"></div>
+          <div id="loadingText">Caricamento catalogo...</div>
+          <div id="loadingProgress" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;"></div>
+        </div>
+      `;
+    }
+  }
+  
+  updateLoadingProgress(message) {
+    const progressEl = document.getElementById('loadingProgress');
+    if (progressEl) {
+      progressEl.textContent = message;
+    }
+  }
+  
+  async loadDataOptimized() {
+    const startTime = performance.now();
     
     try {
-      loadingEl.textContent = 'Caricamento categorie...';
-      await this.loadCategories();
+      this.updateLoadingProgress('Controllo cache locale...');
       
-      loadingEl.textContent = 'Caricamento prodotti...';
-      await this.loadProducts();
+      // Try to load from cache first
+      const [cachedProducts, cachedCategories] = await Promise.all([
+        getCachedProducts(),
+        getCachedCategories()
+      ]);
       
-      loadingEl.textContent = 'Preparazione interfaccia...';
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Load categories first
+      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
+        this.categories = cachedCategories.categories;
+        this.renderCategoriesList();
+        this.renderCategoryFilters();
+        this.renderProductCategorySelect();
+        this.loadCollapsedState();
+        this.updateLoadingProgress('Categorie caricate dalla cache');
+      } else {
+        this.updateLoadingProgress('Caricamento categorie...');
+        await this.loadCategories();
+      }
+      
+      // Load products
+      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
+        this.products = cachedProducts.products;
+        this.updateLoadingProgress(`${this.products.length} prodotti caricati dalla cache`);
+      } else {
+        this.updateLoadingProgress('Caricamento prodotti dal server...');
+        await this.loadProducts();
+        this.updateLoadingProgress(`${this.products.length} prodotti caricati`);
+      }
+      
+      const loadTime = performance.now() - startTime;
+      console.log(`Catalogo caricato in ${loadTime.toFixed(2)}ms`);
       
     } catch (error) {
       console.error('Errore caricamento dati:', error);
@@ -107,24 +162,31 @@ class CatalogoManager {
     // Search and filters
     const searchInput = safeQuerySelector('#searchInput');
     if (searchInput) {
-      safeAddEventListener(searchInput, 'input', debounce((e) => {
+      const debouncedSearch = debounce((e) => {
         this.searchTerm = e.target.value.toLowerCase();
+        
+        // Track search patterns
+        if (this.searchTerm.length > 2) {
+          smartPrefetcher.trackInteraction('catalog_search', { term: this.searchTerm });
+        }
+        
         this.resetPagination();
         this.filterAndRenderProducts();
-      }, 300));
+      }, 200);
+      
+      safeAddEventListener(searchInput, 'input', debouncedSearch);
     }
 
-    // Infinite scroll
+    // Optimized infinite scroll
     const container = safeQuerySelector('#productsList');
     if (container) {
-      const scrollHandler = createScrollHandler(() => {
+      const scrollHandler = createScrollHandler((scrollInfo) => {
         if (this.hasMoreProducts && !this.isLoading) {
           this.loadMoreProducts();
         }
-      });
+      }, 200);
       
-      safeAddEventListener(container, 'scroll', scrollHandler);
-      safeAddEventListener(window, 'scroll', scrollHandler);
+      safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
 
     // Global controls
@@ -158,6 +220,9 @@ class CatalogoManager {
         ...doc.data()
       })).filter(category => category.name && category.colorHex);
       
+      // Cache categories
+      setCachedCategories(this.categories);
+      
       this.renderCategoriesList();
       this.renderCategoryFilters();
       this.renderProductCategorySelect();
@@ -171,15 +236,6 @@ class CatalogoManager {
 
   async loadProducts() {
     try {
-      // Try to load from cache first
-      const cached = await getCachedProducts();
-      if (cached.isValid && cached.products.length > 0) {
-        this.products = cached.products.filter(product => 
-          product.name && product.categoryId
-        ).sort((a, b) => a.name.localeCompare(b.name));
-        return;
-      }
-      
       // Load from Firestore
       const productsSnap = await getDocs(collection(db, 'products'));
       this.products = productsSnap.docs.map(doc => ({
@@ -196,6 +252,13 @@ class CatalogoManager {
       this.showError('Errore nel caricamento dei prodotti');
       this.products = [];
     }
+  }
+
+  resetPagination() {
+    this.currentBatch = 0;
+    this.renderedProducts = [];
+    this.hasMoreProducts = true;
+    this.isLoading = false;
   }
 
   renderCategoriesList() {
@@ -311,11 +374,15 @@ class CatalogoManager {
     if (this.isLoading || !this.hasMoreProducts) return;
     
     this.isLoading = true;
-    const startIndex = this.currentBatch * ITEMS_PER_BATCH;
-    const endIndex = startIndex + ITEMS_PER_BATCH;
+    this.showLoadingIndicator();
+    
+    const batchSize = getAdaptiveBatchSize();
+    const startIndex = this.currentBatch * batchSize;
+    const endIndex = startIndex + batchSize;
     
     if (startIndex >= this.filteredProducts.length) {
       this.hasMoreProducts = false;
+      this.hideLoadingIndicator();
       this.isLoading = false;
       return;
     }
@@ -327,7 +394,32 @@ class CatalogoManager {
     this.hasMoreProducts = endIndex < this.filteredProducts.length;
     
     await this.renderProductsBatch(batch, startIndex === 0);
+    
+    this.hideLoadingIndicator();
     this.isLoading = false;
+  }
+
+  showLoadingIndicator() {
+    if (this.loadingIndicator) return;
+    
+    const container = safeQuerySelector('#productsList');
+    if (!container) return;
+    
+    this.loadingIndicator = document.createElement('div');
+    this.loadingIndicator.className = 'loading-more';
+    this.loadingIndicator.innerHTML = `
+      <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color); border-top: 2px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem;"></div>
+      Caricamento altri prodotti...
+    `;
+    
+    container.appendChild(this.loadingIndicator);
+  }
+  
+  hideLoadingIndicator() {
+    if (this.loadingIndicator && this.loadingIndicator.parentNode) {
+      this.loadingIndicator.remove();
+      this.loadingIndicator = null;
+    }
   }
 
   renderProductCategorySelect() {
@@ -365,12 +457,6 @@ class CatalogoManager {
     const container = safeQuerySelector('#productsList');
     if (!container) return;
     
-    // Remove loading indicator if present
-    const existingIndicator = container.querySelector('.loading-more');
-    if (existingIndicator) {
-      existingIndicator.remove();
-    }
-    
     // Group products by category
     const groupedProducts = new Map();
     products.forEach(product => {
@@ -380,82 +466,45 @@ class CatalogoManager {
       groupedProducts.get(product.categoryId).push(product);
     });
 
-    // Create document fragment for better performance
-    const fragment = createDocumentFragment();
-    
-    // Process categories in batches
-    const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-      const categoryA = this.categories.find(c => c.id === categoryIdA);
-      const categoryB = this.categories.find(c => c.id === categoryIdB);
-      if (!categoryA || !categoryB) return 0;
-      return categoryA.name.localeCompare(categoryB.name);
-    });
-    
-    await processBatch(categoryEntries, 5, ([categoryId, categoryProducts]) => {
-      // Check if category section already exists
-      let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
+    // Use scheduled rendering for better performance
+    await scheduleRender(() => {
+      const fragment = document.createDocumentFragment();
       
-      if (!categorySection) {
-        categorySection = this.createCategorySection(categoryId, categoryProducts);
-        if (categorySection) {
-          categorySection.setAttribute('data-category-id', categoryId);
-          fragment.appendChild(categorySection);
-        }
-      } else {
-        // Add products to existing category
-        const productsGrid = categorySection.querySelector('.products-grid');
-        if (productsGrid) {
-          const productFragment = createDocumentFragment();
-          categoryProducts.forEach(product => {
-            const category = this.categories.find(c => c.id === categoryId);
-            const productCard = this.createProductCard(product, category);
-            productFragment.appendChild(productCard);
-          });
-          productsGrid.appendChild(productFragment);
-        }
-      }
+      const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+        const categoryA = this.categories.find(c => c.id === categoryIdA);
+        const categoryB = this.categories.find(c => c.id === categoryIdB);
+        if (!categoryA || !categoryB) return 0;
+        return categoryA.name.localeCompare(categoryB.name);
+      });
       
-      return categorySection;
-    });
-    
-    // Append all at once for better performance
-    container.appendChild(fragment);
-    
-    // Add loading indicator if there are more products
-    if (this.hasMoreProducts) {
-      this.addLoadingIndicator();
-    }
-  }
-
-  addLoadingIndicator() {
-    const container = safeQuerySelector('#productsList');
-    if (!container) return;
-    
-    const indicator = document.createElement('div');
-    indicator.className = 'loading-more';
-    indicator.style.cssText = `
-      text-align: center;
-      padding: 2rem;
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-    `;
-    indicator.innerHTML = `
-      <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color); border-top: 2px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem;"></div>
-      Caricamento altri prodotti...
-    `;
-    
-    container.appendChild(indicator);
-    
-    // Use intersection observer to trigger loading
-    if (this.intersectionObserver) {
-      indicator.dataset.lazyLoad = 'true';
-      indicator.addEventListener('lazyLoad', () => {
-        if (this.hasMoreProducts && !this.isLoading) {
-          this.loadMoreProducts();
+      categoryEntries.forEach(([categoryId, categoryProducts]) => {
+        // Check if category section already exists
+        let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
+        
+        if (!categorySection) {
+          categorySection = this.createCategorySection(categoryId, categoryProducts);
+          if (categorySection) {
+            categorySection.setAttribute('data-category-id', categoryId);
+            fragment.appendChild(categorySection);
+          }
+        } else {
+          // Add products to existing category
+          const productsGrid = categorySection.querySelector('.products-grid');
+          if (productsGrid) {
+            const productFragment = document.createDocumentFragment();
+            categoryProducts.forEach(product => {
+              const category = this.categories.find(c => c.id === categoryId);
+              const productCard = this.createProductCard(product, category);
+              productFragment.appendChild(productCard);
+            });
+            productsGrid.appendChild(productFragment);
+          }
         }
       });
-      this.intersectionObserver.observe(indicator);
-    }
+      
+      // Append all at once for better performance
+      container.appendChild(fragment);
+    });
   }
 
   createCategorySection(categoryId, products) {
@@ -467,6 +516,7 @@ class CatalogoManager {
     
     const categorySection = document.createElement('div');
     categorySection.className = 'category-section compact';
+    categorySection.style.willChange = 'transform, opacity'; // Optimize for animations
     categorySection.style.background = `linear-gradient(135deg, ${category.colorHex}10 0%, transparent 100%)`;
     categorySection.style.border = `1px solid ${category.colorHex}30`;
     categorySection.style.borderRadius = '12px';
@@ -495,6 +545,12 @@ class CatalogoManager {
     `;
     
     categoryHeader.addEventListener('click', () => {
+      // Track category interactions
+      smartPrefetcher.trackInteraction('catalog_category_toggle', {
+        categoryId: category.id,
+        action: this.collapsedCategories.has(categoryId) ? 'expand' : 'collapse'
+      });
+      
       this.toggleCategory(categoryId);
     });
     
@@ -524,6 +580,7 @@ class CatalogoManager {
   createProductCard(product, category) {
     const card = document.createElement('div');
     card.className = 'product-card';
+    card.style.willChange = 'transform, opacity'; // Optimize for animations
     
     card.innerHTML = `
       <div class="product-header">
@@ -549,6 +606,7 @@ class CatalogoManager {
     const deleteBtn = card.querySelector('.btn-delete');
     
     editBtn.addEventListener('click', () => this.editProduct(product.id));
+      smartPrefetcher.trackInteraction('product_edit', { productId: product.id });
     deleteBtn.addEventListener('click', () => this.deleteProduct(product.id));
 
     return card;
@@ -605,6 +663,7 @@ class CatalogoManager {
       }
     });
   }
+      smartPrefetcher.trackInteraction('product_delete', { productId: product.id });
 
   loadCollapsedState() {
     try {
@@ -1011,7 +1070,7 @@ class CatalogoManager {
         if (category.name && category.colorHex) {
           const categoryId = await generateUniqueId('categories', category.name, db);
           await setDoc(doc(db, 'categories', categoryId), {
-            name: category.name,
+    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
             colorHex: category.colorHex,
             createdAt: new Date()
           });

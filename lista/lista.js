@@ -4,17 +4,31 @@ import {
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?6v=1.3.0';
-import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme, initHamburgerMenu } from '../shared/utils.js?6v=1.3.0';
+import { 
+  safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, 
+  getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, 
+  preloadCriticalData, initTheme, initHamburgerMenu, getAdaptiveBatchSize,
+  scheduleRender, globalBatchProcessor, smartPrefetcher, VirtualScrollManager,
+  initEnhancedIntersectionObserver, createScrollHandler
+} from '../shared/utils.js?6v=1.3.0';
 
 class ListaManager {
   constructor() {
     this.selectedDate = new Date();
     this.categories = [];
     this.products = [];
+    this.filteredProducts = [];
+    this.renderedProducts = [];
     this.currentList = { items: [], extras: [], status: {}, version: 0 };
     this.selectedCategory = '';
     this.searchTerm = '';
     this.collapsedCategories = new Set();
+    this.virtualScrollManager = null;
+    this.isLoading = false;
+    this.hasMoreProducts = true;
+    this.currentBatch = 0;
+    this.loadingIndicator = null;
+    this.intersectionObserver = null;
     
     this.init();
   }
@@ -24,26 +38,92 @@ class ListaManager {
     initTheme();
     initHamburgerMenu();
     
+    // Initialize enhanced intersection observer
+    this.intersectionObserver = initEnhancedIntersectionObserver();
+    
+    // Preload critical data in background
+    preloadCriticalData();
+    
     this.setupDateSelector();
     this.setupEventListeners();
     
-    document.getElementById('loadingProducts').classList.remove('hidden');
+    this.showLoadingState();
     
-    await this.loadData();
+    await this.loadDataOptimized();
     await this.loadCurrentList();
-    this.renderProducts();
+    await this.renderProductsOptimized();
     this.renderExtras();
   }
   
-  async loadData() {
+  showLoadingState() {
+    const loadingEl = document.getElementById('loadingProducts');
+    if (loadingEl) {
+      loadingEl.classList.remove('hidden');
+      loadingEl.innerHTML = `
+        <div style="text-align: center; padding: 2rem;">
+          <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid var(--border-color); border-top: 4px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;"></div>
+          <div id="loadingText">Caricamento prodotti...</div>
+          <div id="loadingProgress" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;"></div>
+        </div>
+      `;
+    }
+  }
+  
+  updateLoadingProgress(message) {
+    const progressEl = document.getElementById('loadingProgress');
+    if (progressEl) {
+      progressEl.textContent = message;
+    }
+  }
+  
+  async loadDataOptimized() {
+    const startTime = performance.now();
+    
     try {
-      await Promise.all([
-        this.loadCategories(),
-        this.loadProducts()
+      this.updateLoadingProgress('Controllo cache locale...');
+      
+      // Try to load from cache first
+      const [cachedProducts, cachedCategories] = await Promise.all([
+        getCachedProducts(),
+        getCachedCategories()
       ]);
+      
+      // Load categories first (smaller dataset)
+      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
+        this.categories = cachedCategories.categories;
+        this.renderCategoryFilters();
+        this.loadCollapsedState();
+        this.updateLoadingProgress('Categorie caricate dalla cache');
+      } else {
+        this.updateLoadingProgress('Caricamento categorie...');
+        await this.loadCategories();
+      }
+      
+      // Load products with progress
+      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
+        this.products = cachedProducts.products;
+        this.updateLoadingProgress(`${this.products.length} prodotti caricati dalla cache`);
+      } else {
+        this.updateLoadingProgress('Caricamento prodotti dal server...');
+        await this.loadProducts();
+        this.updateLoadingProgress(`${this.products.length} prodotti caricati`);
+      }
+      
+      const loadTime = performance.now() - startTime;
+      console.log(`Dati caricati in ${loadTime.toFixed(2)}ms`);
+      
+      // Track performance
+      smartPrefetcher.trackInteraction('load_performance', {
+        loadTime,
+        productsCount: this.products.length,
+        categoriesCount: this.categories.length,
+        fromCache: cachedProducts.isValid
+      });
+      
     } catch (error) {
       console.error('Errore caricamento dati:', error);
       this.showError('Errore nel caricamento dei dati');
+      showToast('Errore caricamento dati. Riprova.', 'error');
     }
   }
 
@@ -59,6 +139,13 @@ class ListaManager {
     safeAddEventListener(dateSelector, 'change', (e) => {
       this.selectedDate = new Date(e.target.value);
       currentDateEl.textContent = `${getDayName(this.selectedDate)} ${formatDate(this.selectedDate)}`;
+      
+      // Track date selection pattern
+      smartPrefetcher.trackInteraction('date_selection', {
+        date: e.target.value,
+        dayOfWeek: this.selectedDate.getDay()
+      });
+      
       this.loadCurrentList();
     });
   }
@@ -66,10 +153,31 @@ class ListaManager {
   setupEventListeners() {
     const searchInput = safeQuerySelector('#searchInput');
     if (searchInput) {
-      safeAddEventListener(searchInput, 'input', debounce((e) => {
+      const debouncedSearch = debounce((e) => {
         this.searchTerm = e.target.value.toLowerCase();
-        this.renderProducts();
-      }, 300));
+        
+        // Track search patterns
+        if (this.searchTerm.length > 2) {
+          smartPrefetcher.trackInteraction('search', { term: this.searchTerm });
+        }
+        
+        this.resetPagination();
+        this.filterAndRenderProducts();
+      }, 200); // Reduced debounce for better responsiveness
+      
+      safeAddEventListener(searchInput, 'input', debouncedSearch);
+    }
+
+    // Optimized scroll handler
+    const container = safeQuerySelector('#productsList');
+    if (container) {
+      const scrollHandler = createScrollHandler((scrollInfo) => {
+        if (this.hasMoreProducts && !this.isLoading) {
+          this.loadMoreProducts();
+        }
+      }, 200); // Reduced threshold for better UX
+      
+      safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
 
     const addExtraBtn = safeQuerySelector('#addExtraBtn');
@@ -118,6 +226,9 @@ class ListaManager {
         ...doc.data()
       })).filter(category => category.name && category.colorHex);
       
+      // Cache categories
+      setCachedCategories(this.categories);
+      
       this.renderCategoryFilters();
       this.loadCollapsedState();
     } catch (error) {
@@ -136,6 +247,10 @@ class ListaManager {
         ...doc.data()
       })).filter(product => product.name && product.categoryId)
         .sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Cache products
+      setCachedProducts(this.products);
+      
     } catch (error) {
       console.error('Errore caricamento prodotti:', error);
       this.showError('Errore nel caricamento dei prodotti');
@@ -143,6 +258,79 @@ class ListaManager {
     }
   }
 
+  resetPagination() {
+    this.currentBatch = 0;
+    this.renderedProducts = [];
+    this.hasMoreProducts = true;
+    this.isLoading = false;
+  }
+  
+  filterAndRenderProducts() {
+    // Filter products
+    this.filteredProducts = this.products.filter(product => {
+      const matchesSearch = !this.searchTerm || 
+        product.name.toLowerCase().includes(this.searchTerm);
+      const matchesCategory = !this.selectedCategory || 
+        product.categoryId === this.selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+
+    // Reset and render first batch
+    this.resetPagination();
+    this.renderProductsOptimized();
+  }
+  
+  async loadMoreProducts() {
+    if (this.isLoading || !this.hasMoreProducts) return;
+    
+    this.isLoading = true;
+    this.showLoadingIndicator();
+    
+    const batchSize = getAdaptiveBatchSize();
+    const startIndex = this.currentBatch * batchSize;
+    const endIndex = startIndex + batchSize;
+    
+    if (startIndex >= this.filteredProducts.length) {
+      this.hasMoreProducts = false;
+      this.hideLoadingIndicator();
+      this.isLoading = false;
+      return;
+    }
+    
+    const batch = this.filteredProducts.slice(startIndex, endIndex);
+    this.renderedProducts.push(...batch);
+    
+    this.currentBatch++;
+    this.hasMoreProducts = endIndex < this.filteredProducts.length;
+    
+    await this.renderProductsBatch(batch, startIndex === 0);
+    
+    this.hideLoadingIndicator();
+    this.isLoading = false;
+  }
+  
+  showLoadingIndicator() {
+    if (this.loadingIndicator) return;
+    
+    const container = safeQuerySelector('#productsList');
+    if (!container) return;
+    
+    this.loadingIndicator = document.createElement('div');
+    this.loadingIndicator.className = 'loading-more';
+    this.loadingIndicator.innerHTML = `
+      <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color); border-top: 2px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem;"></div>
+      Caricamento altri prodotti...
+    `;
+    
+    container.appendChild(this.loadingIndicator);
+  }
+  
+  hideLoadingIndicator() {
+    if (this.loadingIndicator && this.loadingIndicator.parentNode) {
+      this.loadingIndicator.remove();
+      this.loadingIndicator = null;
+    }
+  }
   async loadCurrentList() {
     try {
       const week = getWeekString(this.selectedDate);
@@ -156,7 +344,7 @@ class ListaManager {
         this.currentList = { items: [], extras: [], status: {}, version: 0 };
       }
       
-      this.renderProducts();
+      this.renderProductsOptimized();
       this.renderExtras();
     } catch (error) {
       console.error('Errore caricamento lista:', error);
@@ -175,7 +363,7 @@ class ListaManager {
     allBtn.textContent = 'Tutte';
     allBtn.addEventListener('click', () => {
       this.selectedCategory = '';
-      this.renderProducts();
+      this.filterAndRenderProducts();
       this.updateCategoryFilters();
     });
     container.appendChild(allBtn);
@@ -188,8 +376,14 @@ class ListaManager {
       btn.style.backgroundColor = this.selectedCategory === category.id ? category.colorHex : '';
       btn.style.color = this.selectedCategory === category.id ? getContrastColor(category.colorHex) : '';
       btn.addEventListener('click', () => {
+        // Track category selection
+        smartPrefetcher.trackInteraction('category_selection', {
+          categoryId: category.id,
+          categoryName: category.name
+        });
+        
         this.selectedCategory = category.id;
-        this.renderProducts();
+        this.filterAndRenderProducts();
         this.updateCategoryFilters();
       });
       container.appendChild(btn);
@@ -213,7 +407,7 @@ class ListaManager {
     });
   }
 
-  renderProducts() {
+  async renderProductsOptimized() {
     const container = document.getElementById('productsList');
     const loading = document.getElementById('loadingProducts');
     
@@ -222,36 +416,70 @@ class ListaManager {
     loading.classList.add('hidden');
     container.classList.remove('hidden');
     
-    let filteredProducts = this.products.filter(product => {
-      const matchesSearch = !this.searchTerm || 
-        product.name.toLowerCase().includes(this.searchTerm);
-      const matchesCategory = !this.selectedCategory || 
-        product.categoryId === this.selectedCategory;
-      return matchesSearch && matchesCategory;
-    });
-
+    // Clear container for fresh render
+    container.innerHTML = '';
+    
+    // Filter products if not already done
+    if (this.filteredProducts.length === 0) {
+      this.filterAndRenderProducts();
+      return;
+    }
+    
+    // Load first batch
+    await this.loadMoreProducts();
+  }
+  
+  async renderProductsBatch(products, isFirstBatch = false) {
+    const container = safeQuerySelector('#productsList');
+    if (!container) return;
+    
+    // Group products by category
     const groupedProducts = new Map();
-    filteredProducts.forEach(product => {
+    products.forEach(product => {
       if (!groupedProducts.has(product.categoryId)) {
         groupedProducts.set(product.categoryId, []);
       }
       groupedProducts.get(product.categoryId).push(product);
     });
 
-    container.innerHTML = '';
-    
-    const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-      const categoryA = this.categories.find(c => c.id === categoryIdA);
-      const categoryB = this.categories.find(c => c.id === categoryIdB);
-      if (!categoryA || !categoryB) return 0;
-      return categoryA.name.localeCompare(categoryB.name);
-    });
-    
-    sortedCategoryEntries.forEach(([categoryId, products]) => {
-      const categorySection = this.createCategorySection(categoryId, products);
-      if (categorySection) {
-        container.appendChild(categorySection);
-      }
+    // Use scheduled rendering for better performance
+    await scheduleRender(() => {
+      const fragment = document.createDocumentFragment();
+      
+      const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+        const categoryA = this.categories.find(c => c.id === categoryIdA);
+        const categoryB = this.categories.find(c => c.id === categoryIdB);
+        if (!categoryA || !categoryB) return 0;
+        return categoryA.name.localeCompare(categoryB.name);
+      });
+      
+      sortedCategoryEntries.forEach(([categoryId, categoryProducts]) => {
+        // Check if category section already exists
+        let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
+        
+        if (!categorySection) {
+          categorySection = this.createCategorySection(categoryId, categoryProducts);
+          if (categorySection) {
+            categorySection.setAttribute('data-category-id', categoryId);
+            fragment.appendChild(categorySection);
+          }
+        } else {
+          // Add products to existing category
+          const productsGrid = categorySection.querySelector('.products-grid');
+          if (productsGrid) {
+            const productFragment = document.createDocumentFragment();
+            categoryProducts.forEach(product => {
+              const category = this.categories.find(c => c.id === categoryId);
+              const productCard = this.createProductCard(product, category);
+              productFragment.appendChild(productCard);
+            });
+            productsGrid.appendChild(productFragment);
+          }
+        }
+      });
+      
+      // Append all at once for better performance
+      container.appendChild(fragment);
     });
   }
   
@@ -292,6 +520,12 @@ class ListaManager {
     `;
     
     categoryHeader.addEventListener('click', () => {
+      // Track category toggle
+      smartPrefetcher.trackInteraction('category_toggle', {
+        categoryId: category.id,
+        action: this.collapsedCategories.has(categoryId) ? 'expand' : 'collapse'
+      });
+      
       this.toggleCategory(categoryId);
     });
     
@@ -326,21 +560,47 @@ class ListaManager {
     }
     
     this.saveCollapsedState();
-    this.renderProducts();
+    this.updateCategoryVisibility();
+  }
+  
+  updateCategoryVisibility() {
+    const categorySections = document.querySelectorAll('.category-section');
+    categorySections.forEach(section => {
+      const categoryId = section.getAttribute('data-category-id');
+      if (categoryId) {
+        const isCollapsed = this.collapsedCategories.has(categoryId);
+        const content = section.querySelector('.category-content');
+        const toggleIcon = section.querySelector('.category-toggle-icon');
+        
+        if (content && toggleIcon) {
+          if (isCollapsed) {
+            content.style.maxHeight = '0';
+            content.style.opacity = '0';
+            content.style.padding = '0';
+            toggleIcon.classList.add('collapsed');
+          } else {
+            content.style.maxHeight = '2000px';
+            content.style.opacity = '1';
+            content.style.padding = '0.5rem';
+            toggleIcon.classList.remove('collapsed');
+          }
+        }
+      }
+    });
   }
 
   expandAllCategories() {
     this.collapsedCategories.clear();
     this.saveCollapsedState();
-    this.renderProducts();
+    this.updateCategoryVisibility();
     showToast('Tutte le categorie espanse', 'success');
   }
 
   collapseAllCategories() {
-    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
+    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
     this.saveCollapsedState();
-    this.renderProducts();
+    this.updateCategoryVisibility();
     showToast('Tutte le categorie chiuse', 'success');
   }
 
@@ -370,6 +630,7 @@ class ListaManager {
 
     const card = document.createElement('div');
     card.className = `product-card ${quantity > 0 ? 'has-quantity' : ''}`;
+    card.style.willChange = 'transform, opacity'; // Optimize for animations
     
     card.innerHTML = `
       <div class="product-header">
@@ -408,6 +669,14 @@ class ListaManager {
       });
     });
 
+        // Track quantity changes
+        smartPrefetcher.trackInteraction('quantity_change', {
+          productId: product.id,
+          action,
+          oldQuantity: currentQty,
+          newQuantity: newQty
+        });
+        
     return card;
   }
   
