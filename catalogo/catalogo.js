@@ -21,6 +21,7 @@ class CatalogoManager {
     this.editingCategory = null;
     this.editingProduct = null;
     this.editingProductInline = new Set(); // Track which products are being edited inline
+    this.collapsedCategories = new Set(); // Track collapsed categories
     
     // Performance optimizations
     this.renderQueue = [];
@@ -196,6 +197,21 @@ class CatalogoManager {
       this.importData(e.target.files[0]);
       });
     }
+
+    // Global controls for expand/collapse
+    const expandAllBtn = safeQuerySelector('#expandAllBtn');
+    if (expandAllBtn) {
+      safeAddEventListener(expandAllBtn, 'click', () => {
+        this.expandAllCategories();
+      });
+    }
+
+    const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
+    if (collapseAllBtn) {
+      safeAddEventListener(collapseAllBtn, 'click', () => {
+        this.collapseAllCategories();
+      });
+    }
   }
 
   // Optimized filtering with caching
@@ -296,6 +312,9 @@ class CatalogoManager {
       });
       
       this.products = validProducts;
+      
+      // Load collapsed state after products are loaded
+      this.loadCollapsedState();
       
       // Cache products
       this.products.forEach(product => {
@@ -627,6 +646,7 @@ class CatalogoManager {
 
     // Sort products within category alphabetically
     products.sort((a, b) => a.name.localeCompare(b.name));
+    const isCollapsed = this.collapsedCategories.has(categoryId);
     
     const categorySection = document.createElement('div');
     categorySection.className = 'category-section';
@@ -634,43 +654,88 @@ class CatalogoManager {
       background: linear-gradient(135deg, ${category.colorHex}05 0%, transparent 100%);
       border: 1px solid ${category.colorHex}20;
       border-radius: 12px;
-      padding: 1.5rem;
       margin-bottom: 2rem;
     `;
     
     const categoryHeader = document.createElement('div');
-    categoryHeader.className = 'category-header';
+    categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
     categoryHeader.innerHTML = `
       <div class="category-title">
+        <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
         <div class="category-color-indicator" style="background: ${category.colorHex};"></div>
         <h3 style="color: ${category.colorHex}; margin: 0;">📂 ${category.name}</h3>
-        <span class="product-count">${products.length} prodott${products.length === 1 ? 'o' : 'i'}</span>
       </div>
-      <div class="category-actions">
-        <button class="btn-icon btn-secondary" title="Modifica categoria">
-          <span>⚙️</span>
-        </button>
-      </div>
+      <span class="product-count">${products.length} prodott${products.length === 1 ? 'o' : 'i'}</span>
     `;
     
-    // Add event listener for category edit
-    const editCategoryBtn = categoryHeader.querySelector('.btn-secondary');
-    if (editCategoryBtn) {
-      editCategoryBtn.addEventListener('click', () => this.editCategory(categoryId));
-    }
+    // Add click handler for toggle
+    categoryHeader.addEventListener('click', () => {
+      this.toggleCategory(categoryId);
+    });
+    
+    categorySection.appendChild(categoryHeader);
+    
+    const categoryContent = document.createElement('div');
+    categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
     
     const productsGrid = document.createElement('div');
     productsGrid.className = 'products-grid';
+    productsGrid.style.padding = '1.5rem';
     
     products.forEach(product => {
       const productElement = this.createProductElement(product, category);
       productsGrid.appendChild(productElement);
     });
     
-    categorySection.appendChild(categoryHeader);
-    categorySection.appendChild(productsGrid);
+    categoryContent.appendChild(productsGrid);
+    categorySection.appendChild(categoryContent);
     
     return categorySection;
+  }
+
+  toggleCategory(categoryId) {
+    if (this.collapsedCategories.has(categoryId)) {
+      this.collapsedCategories.delete(categoryId);
+    } else {
+      this.collapsedCategories.add(categoryId);
+    }
+    
+    // Save state to localStorage
+    localStorage.setItem('catalogoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    
+    this.throttledRender();
+  }
+
+  expandAllCategories() {
+    this.collapsedCategories.clear();
+    localStorage.setItem('catalogoCollapsedCategories', JSON.stringify([]));
+    this.throttledRender();
+    showToast('Tutte le categorie espanse', 'success');
+  }
+
+  collapseAllCategories() {
+    // Add all category IDs to collapsed set
+    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
+    this.collapsedCategories = new Set(categoryIds);
+    localStorage.setItem('catalogoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    this.throttledRender();
+    showToast('Tutte le categorie chiuse', 'success');
+  }
+
+  loadCollapsedState() {
+    try {
+      const saved = localStorage.getItem('catalogoCollapsedCategories');
+      if (saved) {
+        this.collapsedCategories = new Set(JSON.parse(saved));
+      } else {
+        // Default: all categories collapsed
+        const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
+        this.collapsedCategories = new Set(categoryIds);
+      }
+    } catch (error) {
+      console.warn('Errore caricamento stato categorie:', error);
+      this.collapsedCategories = new Set();
+    }
   }
 
   // Original renderProducts method (keeping for reference)
