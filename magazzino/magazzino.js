@@ -20,6 +20,7 @@ class MagazzinoManager {
     this.currentChecklist = { items: [] };
     this.notifications = [];
     this.unreadCount = 0;
+    this.collapsedCategories = new Set(); // Track collapsed categories
     
     // Performance optimizations
     this.renderQueue = [];
@@ -156,6 +157,21 @@ class MagazzinoManager {
     if (markAllReadBtn) {
       safeAddEventListener(markAllReadBtn, 'click', () => {
         this.markAllNotificationsRead();
+      });
+    }
+
+    // Global controls for expand/collapse
+    const expandAllBtn = safeQuerySelector('#expandAllBtn');
+    if (expandAllBtn) {
+      safeAddEventListener(expandAllBtn, 'click', () => {
+        this.expandAllCategories();
+      });
+    }
+
+    const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
+    if (collapseAllBtn) {
+      safeAddEventListener(collapseAllBtn, 'click', () => {
+        this.collapseAllCategories();
       });
     }
   }
@@ -711,12 +727,18 @@ class MagazzinoManager {
             <div id="statusBar" style="height: 10px; width: 0%; background: #22c55e; transition: width .2s;"></div>
           </div>
         </div>
-        <button class="btn btn-error delete-list-btn" style="padding: 0.5rem 1rem;">
-          🗑️ Elimina Lista
-        </button>
       </div>
     `;
     fragment.appendChild(headerDiv);
+    
+    // Global Controls
+    const globalControlsDiv = document.createElement('div');
+    globalControlsDiv.className = 'global-controls';
+    globalControlsDiv.innerHTML = `
+      <button id="expandAllBtn" class="btn btn-secondary">📂 Apri Tutti</button>
+      <button id="collapseAllBtn" class="btn btn-secondary">📁 Chiudi Tutti</button>
+    `;
+    fragment.appendChild(globalControlsDiv);
     
     
     // Aggiorna stato/progresso lista
@@ -764,28 +786,66 @@ class MagazzinoManager {
       const category = this.categories.find(c => c.id === categoryId);
       if (!category) return;
       
+      const isCollapsed = this.collapsedCategories.has(categoryId);
+      
       // Sort items within category alphabetically
       items.sort((a, b) => a.product.name.localeCompare(b.product.name));
       
       const categorySection = document.createElement('div');
-      categorySection.className = 'mb-4';
+      categorySection.className = 'category-section mb-4';
+      categorySection.style.cssText = `
+        background: linear-gradient(135deg, ${category.colorHex}05 0%, transparent 100%);
+        border: 1px solid ${category.colorHex}20;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+      `;
       
       const categoryHeader = document.createElement('div');
-      categoryHeader.className = 'flex justify-between mb-2';
+      categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
       categoryHeader.innerHTML = `
-        <h3 style="color: ${category.colorHex};">📂 ${category.name}</h3>
-        <button class="btn btn-primary mark-category-complete-btn" data-category-id="${categoryId}"
-                style="padding: 0.5rem 1rem;">Segna tutti</button>
+        <div class="category-title">
+          <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
+          <div class="category-color-indicator" style="background: ${category.colorHex};"></div>
+          <h3 style="color: ${category.colorHex}; margin: 0;">📂 ${category.name}</h3>
+        </div>
+        <div class="category-actions">
+          <button class="btn btn-primary mark-category-complete-btn" data-category-id="${categoryId}"
+                  style="padding: 0.5rem 1rem;">Segna tutti</button>
+        </div>
       `;
+      
+      // Add click handler for toggle (but not on the button)
+      categoryHeader.addEventListener('click', (e) => {
+        if (!e.target.closest('.mark-category-complete-btn')) {
+          this.toggleCategory(categoryId);
+        }
+      });
+      
       categorySection.appendChild(categoryHeader);
+      
+      const categoryContent = document.createElement('div');
+      categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
+      categoryContent.style.padding = '1rem';
       
       items.forEach(item => {
         const itemCard = this.createChecklistItemCard(item);
-        categorySection.appendChild(itemCard);
+        categoryContent.appendChild(itemCard);
       });
+      
+      categorySection.appendChild(categoryContent);
       
       fragment.appendChild(categorySection);
     });
+    
+    // Delete List Button - Positioned after categories
+    const deleteListDiv = document.createElement('div');
+    deleteListDiv.className = 'delete-list-container';
+    deleteListDiv.innerHTML = `
+      <button class="btn btn-error delete-list-btn">
+        🗑️ Elimina Lista
+      </button>
+    `;
+    fragment.appendChild(deleteListDiv);
     
     // Render extras
     if (this.currentChecklist.extras && this.currentChecklist.extras.length > 0) {
@@ -802,7 +862,7 @@ class MagazzinoManager {
       
       sortedExtras.forEach((extra) => {
         const originalIndex = this.currentChecklist.extras.findIndex(e => e.name === extra.name);
-        const extraCard = this.createExtraItemCard(extra, index);
+        const extraCard = this.createExtraItemCard(extra, originalIndex);
         extrasSection.appendChild(extraCard);
       });
       
@@ -823,6 +883,60 @@ class MagazzinoManager {
     
     // Attach event listeners
     this.attachChecklistEventListeners(container);
+    
+    // Load collapsed state after rendering
+    this.loadCollapsedState();
+  }
+  
+  toggleCategory(categoryId) {
+    if (this.collapsedCategories.has(categoryId)) {
+      this.collapsedCategories.delete(categoryId);
+    } else {
+      this.collapsedCategories.add(categoryId);
+    }
+    
+    // Save state to localStorage
+    localStorage.setItem('magazzinoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    
+    this.throttledRender();
+  }
+
+  expandAllCategories() {
+    this.collapsedCategories.clear();
+    localStorage.setItem('magazzinoCollapsedCategories', JSON.stringify([]));
+    this.throttledRender();
+    showToast('Tutte le categorie espanse', 'success');
+  }
+
+  collapseAllCategories() {
+    // Add all category IDs to collapsed set
+    const categoryIds = [...new Set(this.currentChecklist.items.map(item => {
+      const product = this.products.find(p => p.id === item.id);
+      return product ? product.categoryId : null;
+    }).filter(Boolean))];
+    this.collapsedCategories = new Set(categoryIds);
+    localStorage.setItem('magazzinoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    this.throttledRender();
+    showToast('Tutte le categorie chiuse', 'success');
+  }
+
+  loadCollapsedState() {
+    try {
+      const saved = localStorage.getItem('magazzinoCollapsedCategories');
+      if (saved) {
+        this.collapsedCategories = new Set(JSON.parse(saved));
+      } else {
+        // Default: all categories collapsed
+        const categoryIds = [...new Set(this.currentChecklist.items.map(item => {
+          const product = this.products.find(p => p.id === item.id);
+          return product ? product.categoryId : null;
+        }).filter(Boolean))];
+        this.collapsedCategories = new Set(categoryIds);
+      }
+    } catch (error) {
+      console.warn('Errore caricamento stato categorie:', error);
+      this.collapsedCategories = new Set();
+    }
   }
   
   // Attach event listeners after rendering from cache
@@ -831,6 +945,17 @@ class MagazzinoManager {
     const deleteListBtn = container.querySelector('.delete-list-btn');
     if (deleteListBtn) {
       deleteListBtn.addEventListener('click', () => this.deleteList());
+    }
+    
+    // Global controls
+    const expandAllBtn = container.querySelector('#expandAllBtn');
+    if (expandAllBtn) {
+      expandAllBtn.addEventListener('click', () => this.expandAllCategories());
+    }
+    
+    const collapseAllBtn = container.querySelector('#collapseAllBtn');
+    if (collapseAllBtn) {
+      collapseAllBtn.addEventListener('click', () => this.collapseAllCategories());
     }
     
     // Mark category complete buttons
