@@ -1219,7 +1219,7 @@ export function initHamburgerMenu() {
     expandBtn.addEventListener('click', () => {
       if (window.listaManager) {
         window.listaManager.expandAllCategories();
-      } else if (window.catalogoManager && typeof window.catalogoManager.expandAllCategories === 'function') {
+      } else if (window.catalogoManager) {
         window.catalogoManager.expandAllCategories();
       }
       hideDropdown();
@@ -1233,7 +1233,7 @@ export function initHamburgerMenu() {
     collapseBtn.addEventListener('click', () => {
       if (window.listaManager) {
         window.listaManager.collapseAllCategories();
-      } else if (window.catalogoManager && typeof window.catalogoManager.collapseAllCategories === 'function') {
+      } else if (window.catalogoManager) {
         window.catalogoManager.collapseAllCategories();
       }
       hideDropdown();

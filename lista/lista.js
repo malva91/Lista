@@ -3,12 +3,8 @@ import {
   collection, doc, getDocs, getDoc, setDoc, onSnapshot, deleteDoc,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { formatDate, getWeekString, getDayName, showToast, debounce , getContrastColor } from '../shared/utils.js?v=1.2.0';
+import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.2.0';
 import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.2.0';
-
-// Cache per migliorare le performance
-const listCache = new Map();
-const productRenderCache = new Map();
 
 class ListaManager {
   constructor() {
@@ -18,125 +14,44 @@ class ListaManager {
     this.currentList = { items: [], extras: [], status: {}, version: 0 };
     this.selectedCategory = '';
     this.searchTerm = '';
-    this.collapsedCategories = new Set(); // Track collapsed categories
-    
-    // Performance optimizations
-    this.renderQueue = [];
-    this.isRendering = false;
-    this.lastRenderTime = 0;
-    this.renderThrottle = 16; // ~60fps
+    this.collapsedCategories = new Set();
     
     this.init();
   }
 
   async init() {
-    // Initialize mobile utilities
     initMobileUtils();
-    
-    // Initialize theme
     initTheme();
-    
-    // Initialize hamburger menu
     initHamburgerMenu();
-    
-    // Preload critical data
-    preloadCriticalData();
     
     this.setupDateSelector();
     this.setupEventListeners();
     
-    // Show loading immediately
     document.getElementById('loadingProducts').classList.remove('hidden');
     
-    // Load data with optimized strategy
-    await this.loadDataOptimized();
-    
+    await this.loadData();
     await this.loadCurrentList();
-    this.throttledRender();
+    this.renderProducts();
     this.renderExtras();
   }
   
-  async loadDataOptimized() {
+  async loadData() {
     try {
-      // Try to load from cache first
-      const [cachedCategories, cachedProducts] = await Promise.all([
-        getCachedCategories(),
-        getCachedProducts()
-      ]);
-      
-      // Use cached data if valid
-      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
-        this.categories = cachedCategories.categories;
-        this.renderCategoryFilters();
-      }
-      
-      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
-        this.products = cachedProducts.products;
-        this.throttledRender();
-        document.getElementById('loadingProducts').classList.add('hidden');
-      }
-      
-      // Load fresh data in background if cache is invalid or empty
-      const needsFreshCategories = !cachedCategories.isValid || cachedCategories.categories.length === 0;
-      const needsFreshProducts = !cachedProducts.isValid || cachedProducts.products.length === 0;
-      
-      if (needsFreshCategories || needsFreshProducts) {
-        const promises = [];
-        
-        if (needsFreshCategories) {
-          promises.push(this.loadCategories(true));
-        }
-        
-        if (needsFreshProducts) {
-          promises.push(this.loadProducts(true));
-        }
-        
-        await Promise.allSettled(promises);
-      }
-      
-    } catch (error) {
-      console.error('Errore caricamento dati ottimizzato:', error);
-      // Fallback to normal loading
-      await Promise.allSettled([
+      await Promise.all([
         this.loadCategories(),
         this.loadProducts()
       ]);
+    } catch (error) {
+      console.error('Errore caricamento dati:', error);
+      this.showError('Errore nel caricamento dei dati');
     }
-  }
-
-  // Throttled rendering per migliorare performance
-  throttledRender() {
-    const now = Date.now();
-    if (now - this.lastRenderTime < this.renderThrottle) {
-      if (!this.renderTimeout) {
-        this.renderTimeout = setTimeout(() => {
-          this.renderTimeout = null;
-          this.performRender();
-        }, this.renderThrottle);
-      }
-      return;
-    }
-    
-    this.performRender();
-  }
-  
-  performRender() {
-    this.lastRenderTime = Date.now();
-    
-    // Use requestAnimationFrame for smooth rendering
-    requestAnimationFrame(() => {
-      this.renderProducts();
-    });
   }
 
   setupDateSelector() {
     const dateSelector = safeQuerySelector('#dateSelector');
     const currentDateEl = safeQuerySelector('#currentDate');
     
-    if (!dateSelector || !currentDateEl) {
-      console.error('Elementi date selector non trovati');
-      return;
-    }
+    if (!dateSelector || !currentDateEl) return;
     
     dateSelector.value = formatDate(this.selectedDate);
     currentDateEl.textContent = `${getDayName(this.selectedDate)} ${formatDate(this.selectedDate)}`;
@@ -144,11 +59,6 @@ class ListaManager {
     safeAddEventListener(dateSelector, 'change', (e) => {
       this.selectedDate = new Date(e.target.value);
       currentDateEl.textContent = `${getDayName(this.selectedDate)} ${formatDate(this.selectedDate)}`;
-      
-      // Clear cache when date changes
-      listCache.clear();
-      productRenderCache.clear();
-      
       this.loadCurrentList();
     });
   }
@@ -158,15 +68,13 @@ class ListaManager {
     if (searchInput) {
       safeAddEventListener(searchInput, 'input', debounce((e) => {
         this.searchTerm = e.target.value.toLowerCase();
-        this.throttledRender();
+        this.renderProducts();
       }, 300));
     }
 
     const addExtraBtn = safeQuerySelector('#addExtraBtn');
     if (addExtraBtn) {
-      safeAddEventListener(addExtraBtn, 'click', () => {
-        this.addExtra();
-      });
+      safeAddEventListener(addExtraBtn, 'click', () => this.addExtra());
     }
 
     const extraName = safeQuerySelector('#extraName');
@@ -178,72 +86,40 @@ class ListaManager {
 
     const saveDraftBtn = safeQuerySelector('#saveDraftBtn');
     if (saveDraftBtn) {
-      safeAddEventListener(saveDraftBtn, 'click', () => {
-        this.saveList(false);
-      });
+      safeAddEventListener(saveDraftBtn, 'click', () => this.saveList(false));
     }
 
     const submitBtn = safeQuerySelector('#submitBtn');
     if (submitBtn) {
-      safeAddEventListener(submitBtn, 'click', () => {
-        this.saveList(true);
-      });
+      safeAddEventListener(submitBtn, 'click', () => this.saveList(true));
     }
 
-    // Global controls for expand/collapse
     const expandAllBtn = safeQuerySelector('#expandAllBtn');
     if (expandAllBtn) {
-      safeAddEventListener(expandAllBtn, 'click', () => {
-        this.expandAllCategories();
-      });
+      safeAddEventListener(expandAllBtn, 'click', () => this.expandAllCategories());
     }
 
     const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
     if (collapseAllBtn) {
-      safeAddEventListener(collapseAllBtn, 'click', () => {
-        this.collapseAllCategories();
-      });
+      safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
     }
 
-    // Delete list button (test)
     const deleteListBtn = safeQuerySelector('#deleteListBtn');
     if (deleteListBtn) {
-      safeAddEventListener(deleteListBtn, 'click', () => {
-        this.deleteCurrentList();
-      });
+      safeAddEventListener(deleteListBtn, 'click', () => this.deleteCurrentList());
     }
   }
 
-  async loadCategories(updateCache = false) {
+  async loadCategories() {
     try {
-      // Use cached data if available and not updating
-      if (!updateCache && this.categories.length > 0) {
-        return;
-      }
-      
       const categoriesSnap = await getDocs(collection(db, 'categories'));
-      const newCategories = categoriesSnap.docs.map(doc => ({
+      this.categories = categoriesSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
-      
-      // Validazione dei dati delle categorie
-      const validCategories = newCategories.filter(category => {
-        if (!category.name || !category.colorHex) {
-          console.warn('Categoria con dati mancanti ignorata:', category);
-          return false;
-        }
-        return true;
-      });
-      
-      this.categories = validCategories;
-      
-      // Update IndexedDB cache
-      if (updateCache) {
-        setCachedCategories(this.categories);
-      }
+      })).filter(category => category.name && category.colorHex);
       
       this.renderCategoryFilters();
+      this.loadCollapsedState();
     } catch (error) {
       console.error('Errore caricamento categorie:', error);
       this.showError('Errore nel caricamento delle categorie');
@@ -251,38 +127,15 @@ class ListaManager {
     }
   }
 
-  async loadProducts(updateCache = false) {
+  async loadProducts() {
     try {
-      // Use cached data if available and not updating
-      if (!updateCache && this.products.length > 0) {
-        return;
-      }
-      
       const productsQuery = query(collection(db, 'products'), where('active', '==', true));
       const productsSnap = await getDocs(productsQuery);
-      const newProducts = productsSnap.docs.map(doc => ({
+      this.products = productsSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })).sort((a, b) => a.name.localeCompare(b.name));
-      
-      // Validazione dei dati dei prodotti
-      const validProducts = newProducts.filter(product => {
-        if (!product.name || !product.categoryId) {
-          console.warn('Prodotto con dati mancanti ignorato:', product);
-          return false;
-        }
-        return true;
-      });
-      
-      this.products = validProducts;
-      
-      // Load collapsed state after products are loaded
-      this.loadCollapsedState();
-      
-      // Update IndexedDB cache
-      if (updateCache) {
-        setCachedProducts(this.products);
-      }
+      })).filter(product => product.name && product.categoryId)
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch (error) {
       console.error('Errore caricamento prodotti:', error);
       this.showError('Errore nel caricamento dei prodotti');
@@ -295,87 +148,40 @@ class ListaManager {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
-      // Check cache first
-      const cacheKey = `${week}-${day}`;
-      if (listCache.has(cacheKey)) {
-        this.currentList = listCache.get(cacheKey);
-        this.throttledRender();
-        this.renderExtras();
-        return;
+      const listDoc = await getDoc(doc(db, 'weeks', week, 'lists', day));
+      
+      if (listDoc.exists()) {
+        this.currentList = listDoc.data();
+      } else {
+        this.currentList = { items: [], extras: [], status: {}, version: 0 };
       }
       
-      try {
-        const listDoc = await getDoc(doc(db, 'weeks', week, 'lists', day));
-        
-        if (listDoc.exists()) {
-          this.currentList = listDoc.data();
-        } else {
-          this.currentList = { items: [], extras: [], status: {}, version: 0 };
-        }
-        
-        // Cache the result
-        listCache.set(cacheKey, this.currentList);
-        
-        // Limit cache size
-        if (listCache.size > 20) {
-          const firstKey = listCache.keys().next().value;
-          listCache.delete(firstKey);
-        }
-      } catch (firestoreError) {
-        console.warn('Errore Firestore, usando dati locali:', firestoreError);
-        // Fallback to local storage
-        const localData = localStorage.getItem(`list-${week}-${day}`);
-        if (localData) {
-          try {
-            this.currentList = JSON.parse(localData);
-          } catch (parseError) {
-            console.error('Errore parsing dati locali:', parseError);
-            this.currentList = { items: [], extras: [], status: {}, version: 0 };
-          }
-        } else {
-          this.currentList = { items: [], extras: [], status: {}, version: 0 };
-        }
-      }
-      
-      this.throttledRender();
+      this.renderProducts();
       this.renderExtras();
     } catch (error) {
       console.error('Errore caricamento lista:', error);
-      this.showError('Errore nel caricamento della lista');
-      // Ensure we have a valid currentList even on error
-      if (!this.currentList) {
-        this.currentList = { items: [], extras: [], status: {}, version: 0 };
-      }
+      this.currentList = { items: [], extras: [], status: {}, version: 0 };
     }
   }
 
   renderCategoryFilters() {
     const container = document.getElementById('categoryFilters');
-    if (!container) {
-      console.error('Container categoryFilters non trovato');
-      return;
-    }
+    if (!container) return;
+    
+    container.innerHTML = '';
     
     const allBtn = document.createElement('button');
     allBtn.className = `btn btn-secondary ${!this.selectedCategory ? 'active' : ''}`;
     allBtn.textContent = 'Tutte';
     allBtn.addEventListener('click', () => {
       this.selectedCategory = '';
-      this.throttledRender();
+      this.renderProducts();
       this.updateCategoryFilters();
     });
-    
-    container.innerHTML = '';
     container.appendChild(allBtn);
     
-    // Sort categories alphabetically in filters
     const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
     sortedCategories.forEach(category => {
-      if (!category.id || !category.name || !category.colorHex) {
-        console.warn('Categoria con dati mancanti saltata nei filtri:', category);
-        return;
-      }
-      
       const btn = document.createElement('button');
       btn.className = `btn btn-secondary ${this.selectedCategory === category.id ? 'active' : ''}`;
       btn.textContent = category.name;
@@ -383,7 +189,7 @@ class ListaManager {
       btn.style.color = this.selectedCategory === category.id ? getContrastColor(category.colorHex) : '';
       btn.addEventListener('click', () => {
         this.selectedCategory = category.id;
-        this.throttledRender();
+        this.renderProducts();
         this.updateCategoryFilters();
       });
       container.appendChild(btn);
@@ -393,6 +199,7 @@ class ListaManager {
   updateCategoryFilters() {
     const buttons = document.querySelectorAll('#categoryFilters button');
     const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
+    
     buttons.forEach((btn, index) => {
       if (index === 0) {
         btn.classList.toggle('active', !this.selectedCategory);
@@ -406,27 +213,14 @@ class ListaManager {
     });
   }
 
-  // Optimized product rendering with caching
   renderProducts() {
     const container = document.getElementById('productsList');
     const loading = document.getElementById('loadingProducts');
     
-    if (!container) {
-      console.error('Container productsList non trovato');
-      return;
-    }
+    if (!container) return;
     
     loading.classList.add('hidden');
     container.classList.remove('hidden');
-    
-    // Create cache key for current filter state
-    const cacheKey = `${this.searchTerm}-${this.selectedCategory}-${JSON.stringify(this.currentList.items)}`;
-    
-    if (productRenderCache.has(cacheKey)) {
-      container.innerHTML = productRenderCache.get(cacheKey);
-      this.attachEventListeners(container);
-      return;
-    }
     
     let filteredProducts = this.products.filter(product => {
       const matchesSearch = !this.searchTerm || 
@@ -434,9 +228,8 @@ class ListaManager {
       const matchesCategory = !this.selectedCategory || 
         product.categoryId === this.selectedCategory;
       return matchesSearch && matchesCategory;
-    }).sort((a, b) => a.name.localeCompare(b.name)); // Sort filtered results alphabetically
+    });
 
-    // Use Map for better performance
     const groupedProducts = new Map();
     filteredProducts.forEach(product => {
       if (!groupedProducts.has(product.categoryId)) {
@@ -445,10 +238,8 @@ class ListaManager {
       groupedProducts.get(product.categoryId).push(product);
     });
 
-    // Use DocumentFragment for better performance
-    const fragment = document.createDocumentFragment();
+    container.innerHTML = '';
     
-    // Sort categories alphabetically
     const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
       const categoryA = this.categories.find(c => c.id === categoryIdA);
       const categoryB = this.categories.find(c => c.id === categoryIdB);
@@ -456,56 +247,18 @@ class ListaManager {
       return categoryA.name.localeCompare(categoryB.name);
     });
     
-    // Render categories in batches for better performance
-    let categoryIndex = 0;
-    
-    const renderCategoryBatch = () => {
-      const batchSize = 2; // Render 2 categories at a time
-      const endIndex = Math.min(categoryIndex + batchSize, sortedCategoryEntries.length);
-      
-      for (let i = categoryIndex; i < endIndex; i++) {
-        const [categoryId, products] = sortedCategoryEntries[i];
-        const categorySection = this.createCategorySection(categoryId, products);
-        if (categorySection) {
-          fragment.appendChild(categorySection);
-        }
+    sortedCategoryEntries.forEach(([categoryId, products]) => {
+      const categorySection = this.createCategorySection(categoryId, products);
+      if (categorySection) {
+        container.appendChild(categorySection);
       }
-      
-      categoryIndex = endIndex;
-      
-      if (categoryIndex < sortedCategoryEntries.length) {
-        // Continue with next batch
-        requestAnimationFrame(renderCategoryBatch);
-      } else {
-        // Finished rendering all categories
-        container.innerHTML = '';
-        container.appendChild(fragment);
-        
-        // Cache the rendered HTML
-        productRenderCache.set(cacheKey, container.innerHTML);
-        
-        // Limit cache size
-        if (productRenderCache.size > 10) {
-          const firstKey = productRenderCache.keys().next().value;
-          productRenderCache.delete(firstKey);
-        }
-        
-        // Attach event listeners
-        this.attachEventListeners(container);
-      }
-    };
-    
-    renderCategoryBatch();
+    });
   }
   
   createCategorySection(categoryId, products) {
     const category = this.categories.find(c => c.id === categoryId);
-    if (!category) {
-      console.warn('Categoria non trovata per ID:', categoryId);
-      return null;
-    }
+    if (!category) return null;
 
-    // Sort products within category alphabetically
     products.sort((a, b) => a.name.localeCompare(b.name));
     const isCollapsed = this.collapsedCategories.has(categoryId);
     
@@ -518,7 +271,7 @@ class ListaManager {
     categorySection.style.overflow = 'hidden';
     
     const categoryHeader = document.createElement('div');
-    categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
+    categoryHeader.className = 'category-header';
     categoryHeader.style.cssText = `
       color: ${category.colorHex};
       cursor: pointer;
@@ -538,30 +291,18 @@ class ListaManager {
       <span class="product-count">${products.length}</span>
     `;
     
-    // Add click handler for toggle
-    categoryHeader.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    categoryHeader.addEventListener('click', () => {
       this.toggleCategory(categoryId);
-    }, { passive: false });
-    
-    // Add touch handlers for better mobile experience
-    categoryHeader.addEventListener('touchstart', (e) => {
-      categoryHeader.style.opacity = '0.7';
-    }, { passive: true });
-    
-    categoryHeader.addEventListener('touchend', (e) => {
-      categoryHeader.style.opacity = '';
-    }, { passive: true });
+    });
     
     categorySection.appendChild(categoryHeader);
 
     const categoryContent = document.createElement('div');
-    categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
+    categoryContent.className = 'category-content';
     categoryContent.style.cssText = `
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       overflow: hidden;
-      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0; margin: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
+      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
     `;
     
     const productsGrid = document.createElement('div');
@@ -578,101 +319,28 @@ class ListaManager {
   }
   
   toggleCategory(categoryId) {
-    console.log('Toggling category:', categoryId);
-    
     if (this.collapsedCategories.has(categoryId)) {
       this.collapsedCategories.delete(categoryId);
     } else {
       this.collapsedCategories.add(categoryId);
     }
     
-    // Save state to localStorage
-    try {
-      localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
-    } catch (error) {
-      console.warn('Errore salvataggio stato categorie:', error);
-    }
-    
-    // Update UI immediately without full re-render for better performance
-    this.updateCategoryToggleUI(categoryId);
-  }
-  
-  updateCategoryToggleUI(categoryId) {
-    const isCollapsed = this.collapsedCategories.has(categoryId);
-    
-    // Find the category section in DOM
-    const categoryHeaders = document.querySelectorAll('.category-header');
-    categoryHeaders.forEach(header => {
-      const titleElement = header.querySelector('.category-title span:last-child');
-      if (titleElement && titleElement.textContent.includes(this.categories.find(c => c.id === categoryId)?.name)) {
-        const toggleIcon = header.querySelector('.category-toggle-icon');
-        const categoryContent = header.parentElement.querySelector('.category-content');
-        
-        if (toggleIcon && categoryContent) {
-          // Update icon
-          toggleIcon.classList.toggle('collapsed', isCollapsed);
-          toggleIcon.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
-          
-          // Update content visibility
-          categoryContent.classList.toggle('collapsed', isCollapsed);
-          if (isCollapsed) {
-            categoryContent.style.maxHeight = '0';
-            categoryContent.style.opacity = '0';
-            categoryContent.style.padding = '0';
-            categoryContent.style.margin = '0';
-            header.style.borderBottom = 'none';
-          } else {
-            categoryContent.style.maxHeight = '2000px';
-            categoryContent.style.opacity = '1';
-            categoryContent.style.padding = '0.5rem';
-            categoryContent.style.margin = '';
-            const category = this.categories.find(c => c.id === categoryId);
-            if (category) {
-              header.style.borderBottom = `1px solid ${category.colorHex}20`;
-            }
-          }
-        }
-      }
-    });
-    
-    // Clear render cache for next full render
-    productRenderCache.clear();
+    this.saveCollapsedState();
+    this.renderProducts();
   }
 
   expandAllCategories() {
-    console.log('Expanding all categories');
     this.collapsedCategories.clear();
-    try {
-      localStorage.setItem('collapsedCategories', JSON.stringify([]));
-    } catch (error) {
-      console.warn('Errore salvataggio stato categorie:', error);
-    }
-    
-    // Update all categories immediately
-    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
-    categoryIds.forEach(categoryId => {
-      this.updateCategoryToggleUI(categoryId);
-    });
-    
+    this.saveCollapsedState();
+    this.renderProducts();
     showToast('Tutte le categorie espanse', 'success');
   }
 
   collapseAllCategories() {
-    console.log('Collapsing all categories');
-    // Add all category IDs to collapsed set
     const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
-    try {
-      localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
-    } catch (error) {
-      console.warn('Errore salvataggio stato categorie:', error);
-    }
-    
-    // Update all categories immediately
-    categoryIds.forEach(categoryId => {
-      this.updateCategoryToggleUI(categoryId);
-    });
-    
+    this.saveCollapsedState();
+    this.renderProducts();
     showToast('Tutte le categorie chiuse', 'success');
   }
 
@@ -681,125 +349,19 @@ class ListaManager {
       const saved = localStorage.getItem('collapsedCategories');
       if (saved) {
         this.collapsedCategories = new Set(JSON.parse(saved));
-      } else {
-        // Default: all categories expanded for better UX
-        this.collapsedCategories = new Set();
       }
     } catch (error) {
       console.warn('Errore caricamento stato categorie:', error);
       this.collapsedCategories = new Set();
     }
   }
-  
-  // Attach event listeners after rendering from cache
-  attachEventListeners(container) {
-    const qtyInputs = container.querySelectorAll('.qty-input');
-    const qtyBtns = container.querySelectorAll('.qty-btn');
-    const categoryHeaders = container.querySelectorAll('.category-header');
-    
-    qtyInputs.forEach(input => {
-      const productId = input.dataset.productId;
-      if (productId) {
-        safeAddEventListener(input, 'change', (e) => {
-          this.updateQuantity(productId, parseInt(e.target.value) || 0);
-        });
-      }
-    });
-    
-    qtyBtns.forEach(btn => {
-      const productId = btn.dataset.productId;
-      const action = btn.dataset.action;
-      if (productId && action) {
-        safeAddEventListener(btn, 'click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const currentQty = this.getCurrentQuantity(productId);
-          const newQty = action === 'increase' ? currentQty + 1 : Math.max(0, currentQty - 1);
-          this.updateQuantity(productId, newQty);
-        });
-      }
-    });
-    
-    // Re-attach category toggle listeners
-    categoryHeaders.forEach(header => {
-      const titleElement = header.querySelector('.category-title span:last-child');
-      if (titleElement) {
-        const categoryName = titleElement.textContent;
-        const category = this.categories.find(c => c.name === categoryName);
-        if (category) {
-          safeAddEventListener(header, 'click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.toggleCategory(category.id);
-          });
-          
-          // Add touch feedback
-          safeAddEventListener(header, 'touchstart', () => {
-            header.style.opacity = '0.7';
-          });
-          
-          safeAddEventListener(header, 'touchend', () => {
-            header.style.opacity = '';
-          });
-        }
-      }
-    });
-  }
-  
-  getCurrentQuantity(productId) {
-    const existingItem = this.currentList.items.find(item => item.id === productId);
-    return existingItem ? existingItem.quantity : 0;
-  }
 
-  // Original renderProducts method (keeping for reference)
-  renderProductsOriginal() {
-    sortedCategoryEntries.forEach(([categoryId, products]) => {
-      const category = this.categories.find(c => c.id === categoryId);
-      if (!category) {
-        console.warn('Categoria non trovata per ID:', categoryId);
-        return;
-      }
-
-      // Sort products within category alphabetically
-      products.sort((a, b) => a.name.localeCompare(b.name));
-      const categorySection = document.createElement('div');
-      categorySection.className = 'category-section compact';
-      categorySection.style.background = `linear-gradient(135deg, ${category.colorHex}10 0%, transparent 100%)`;
-      categorySection.style.border = `1px solid ${category.colorHex}30`;
-      categorySection.style.borderRadius = '12px';
-      categorySection.style.padding = '0.5rem';
-      categorySection.style.borderLeft = `4px solid ${category.colorHex}`;
-      
-      const categoryHeader = document.createElement('h3');
-      categoryHeader.className = 'category-header-compact';
-      categoryHeader.style.color = category.colorHex;
-      categoryHeader.style.margin = '0 0 0.5rem 0';
-      categoryHeader.style.fontSize = '0.95rem';
-      categoryHeader.style.fontWeight = '600';
-      categoryHeader.style.display = 'flex';
-      categoryHeader.style.alignItems = 'center';
-      categoryHeader.style.gap = '0.5rem';
-      categoryHeader.innerHTML = `
-        <span>📂</span>
-        <span>${category.name}</span>
-        <span style="margin-left: auto; font-size: 0.7rem; opacity: 0.8;">${products.length}</span>
-      `;
-      categorySection.appendChild(categoryHeader);
-
-      const productsGrid = document.createElement('div');
-      productsGrid.className = 'products-grid';
-
-      products.forEach(product => {
-        const productCard = this.createProductCard(product, category);
-        productsGrid.appendChild(productCard);
-      });
-
-      categorySection.appendChild(productsGrid);
-      fragment.appendChild(categorySection);
-    });
-    
-    container.innerHTML = '';
-    container.appendChild(fragment);
+  saveCollapsedState() {
+    try {
+      localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    } catch (error) {
+      console.warn('Errore salvataggio stato categorie:', error);
+    }
   }
 
   createProductCard(product, category) {
@@ -828,18 +390,35 @@ class ListaManager {
       </div>
     `;
 
+    // Add event listeners
+    const qtyInput = card.querySelector('.qty-input');
+    const qtyBtns = card.querySelectorAll('.qty-btn');
+    
+    qtyInput.addEventListener('change', (e) => {
+      this.updateQuantity(product.id, parseInt(e.target.value) || 0);
+    });
+    
+    qtyBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const action = btn.dataset.action;
+        const currentQty = this.getCurrentQuantity(product.id);
+        const newQty = action === 'increase' ? currentQty + 1 : Math.max(0, currentQty - 1);
+        this.updateQuantity(product.id, newQty);
+      });
+    });
+
     return card;
+  }
+  
+  getCurrentQuantity(productId) {
+    const existingItem = this.currentList.items.find(item => item.id === productId);
+    return existingItem ? existingItem.quantity : 0;
   }
 
   updateQuantity(productId, newQuantity) {
-    // Validazione parametri
-    if (!productId) {
-      console.error('ID prodotto mancante');
-      showToast('Errore: ID prodotto mancante', 'error');
-      return;
-    }
+    if (!productId) return;
     
-    // Ensure currentList exists
     if (!this.currentList) {
       this.currentList = { items: [], extras: [], status: {}, version: 0 };
     }
@@ -871,41 +450,22 @@ class ListaManager {
       }
     }
     
-    // Clear render cache since quantities changed
-    productRenderCache.clear();
-    
-    // Update only the specific product card for better performance
     this.updateProductCardQuantity(productId, newQuantity);
     
-    // Save to local storage as backup
     try {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       localStorage.setItem(`list-${week}-${day}`, JSON.stringify(this.currentList));
-      
-      // Update cache
-      const cacheKey = `${week}-${day}`;
-      listCache.set(cacheKey, this.currentList);
-    } catch (storageError) {
-      console.warn('Errore salvataggio locale:', storageError);
-    }
-    
-    // Auto-save draft after quantity change (debounced)
-    if (!this.autoSaveTimeout) {
-      this.autoSaveTimeout = setTimeout(() => {
-        this.saveList(false);
-        this.autoSaveTimeout = null;
-      }, 2000);
+    } catch (error) {
+      console.warn('Errore salvataggio locale:', error);
     }
   }
   
   updateProductCardQuantity(productId, newQuantity) {
-    // Find and update only the specific product card
     const qtyInput = document.querySelector(`.qty-input[data-product-id="${productId}"]`);
     if (qtyInput) {
       qtyInput.value = newQuantity;
       
-      // Update card styling
       const card = qtyInput.closest('.product-card');
       if (card) {
         if (newQuantity > 0) {
@@ -921,12 +481,8 @@ class ListaManager {
     const nameInput = safeQuerySelector('#extraName');
     const qtyInput = safeQuerySelector('#extraQty');
     
-    if (!nameInput || !qtyInput) {
-      console.error('Input per prodotti extra non trovati');
-      return;
-    }
+    if (!nameInput || !qtyInput) return;
     
-    // Ensure currentList exists
     if (!this.currentList) {
       this.currentList = { items: [], extras: [], status: {}, version: 0 };
     }
@@ -935,7 +491,6 @@ class ListaManager {
       this.currentList.extras = [];
     }
     
-    // Validazione input con utility
     const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 100, required: true });
     if (!nameValidation.valid) {
       showToast(nameValidation.error, 'error');
@@ -963,28 +518,19 @@ class ListaManager {
     qtyInput.value = '';
     this.renderExtras();
     
-    // Save to local storage as backup
     try {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       localStorage.setItem(`list-${week}-${day}`, JSON.stringify(this.currentList));
-      
-      // Update cache
-      const cacheKey = `${week}-${day}`;
-      listCache.set(cacheKey, this.currentList);
-    } catch (storageError) {
-      console.warn('Errore salvataggio locale:', storageError);
+    } catch (error) {
+      console.warn('Errore salvataggio locale:', error);
     }
   }
 
   renderExtras() {
     const container = safeQuerySelector('#extrasList');
-    if (!container) {
-      console.error('Container extrasList non trovato');
-      return;
-    }
+    if (!container) return;
     
-    // Ensure currentList exists
     if (!this.currentList || !this.currentList.extras) {
       return;
     }
@@ -1003,7 +549,6 @@ class ListaManager {
                 data-index="${index}">🗑️</button>
       `;
       
-      // Add event listener
       const removeBtn = extraDiv.querySelector('.remove-extra-btn');
       if (removeBtn) {
         removeBtn.addEventListener('click', () => this.removeExtra(index));
@@ -1014,13 +559,9 @@ class ListaManager {
   }
 
   removeExtra(index) {
-    // Ensure currentList exists
-    if (!this.currentList || !this.currentList.extras) {
-      return;
-    }
+    if (!this.currentList || !this.currentList.extras) return;
     
     if (index < 0 || index >= this.currentList.extras.length) {
-      console.error('Indice extra non valido:', index);
       showToast('Errore: indice non valido', 'error');
       return;
     }
@@ -1028,17 +569,12 @@ class ListaManager {
     this.currentList.extras.splice(index, 1);
     this.renderExtras();
     
-    // Save to local storage as backup
     try {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       localStorage.setItem(`list-${week}-${day}`, JSON.stringify(this.currentList));
-      
-      // Update cache
-      const cacheKey = `${week}-${day}`;
-      listCache.set(cacheKey, this.currentList);
-    } catch (storageError) {
-      console.warn('Errore salvataggio locale:', storageError);
+    } catch (error) {
+      console.warn('Errore salvataggio locale:', error);
     }
   }
 
@@ -1047,19 +583,14 @@ class ListaManager {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
-      // Ensure currentList exists
       if (!this.currentList) {
         this.currentList = { items: [], extras: [], status: {}, version: 0 };
       }
-      
-      // Calcola diff per notifiche
-      const previousList = { ...this.currentList };
       
       this.currentList.status.updatedAt = Timestamp.now();
       this.currentList.version = (this.currentList.version || 0) + 1;
       
       if (isSubmit) {
-        // Verifica prodotti importanti
         const importantProducts = this.products.filter(p => p.important);
         const missingImportant = importantProducts.filter(ip => 
           !this.currentList.items.find(item => item.id === ip.id)
@@ -1067,8 +598,6 @@ class ListaManager {
         
         if (missingImportant.length > 0) {
           const missingNames = missingImportant.map(p => p.name).join(', ');
-          
-          // Mostra popup di conferma
           const confirmMessage = `Non hai segnato i seguenti prodotti importanti:\n\n${missingNames}\n\nVuoi continuare comunque?`;
           
           if (!confirm(confirmMessage)) {
@@ -1078,29 +607,19 @@ class ListaManager {
             return;
           }
           
-          // Se l'utente conferma, continua con l'invio
           document.getElementById('validationMessage').classList.add('hidden');
         }
         
         this.currentList.status.submittedAt = Timestamp.now();
       }
       
-      // Salva lista
       await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
       
-      // Save to local storage as backup
       try {
         localStorage.setItem(`list-${week}-${day}`, JSON.stringify(this.currentList));
-        
-        // Update cache
-        const cacheKey = `${week}-${day}`;
-        listCache.set(cacheKey, this.currentList);
-      } catch (storageError) {
-        console.warn('Errore salvataggio locale:', storageError);
+      } catch (error) {
+        console.warn('Errore salvataggio locale:', error);
       }
-      
-      // Genera notifiche
-      await this.generateNotifications(previousList, week, day);
       
       const message = isSubmit ? 'Lista inviata con successo!' : 'Bozza salvata!';
       document.getElementById('successMessage').textContent = message;
@@ -1116,7 +635,6 @@ class ListaManager {
     } catch (error) {
       console.error('Errore salvataggio:', error);
       
-      // Try to save locally as fallback
       try {
         const week = getWeekString(this.selectedDate);
         const day = formatDate(this.selectedDate);
@@ -1129,129 +647,28 @@ class ListaManager {
     }
   }
 
-  async generateNotifications(previousList, week, day) {
-    // Ensure we have valid data
-    if (!this.currentList) {
-      console.warn('currentList non disponibile per notifiche');
+  async deleteCurrentList() {
+    if (!confirm('Sei sicuro di voler eliminare la lista corrente? Questa azione non può essere annullata.')) {
       return;
     }
     
-    const notifications = [];
-    
-    // Confronta items
-    const prevItems = previousList.items || [];
-    const currItems = this.currentList.items || [];
-    
-    // Prodotti aggiunti
-    currItems.forEach(curr => {
-      if (!curr || !curr.id) return;
+    try {
+      const week = getWeekString(this.selectedDate);
+      const day = formatDate(this.selectedDate);
       
-      const prev = prevItems.find(p => p.id === curr.id);
-      if (!prev) {
-        const product = this.products.find(p => p.id === curr.id);
-        notifications.push({
-          type: 'added',
-          id: curr.id,
-          name: product?.name || curr.id,
-          quantity: curr.quantity,
-          atVersion: this.currentList.version
-        });
-      } else if (prev.quantity !== curr.quantity) {
-        const product = this.products.find(p => p.id === curr.id);
-        notifications.push({
-          type: 'qtyChanged',
-          id: curr.id,
-          name: product?.name || curr.id,
-          oldQuantity: prev.quantity,
-          newQuantity: curr.quantity,
-          atVersion: this.currentList.version
-        });
-      }
-    });
-    
-    // Prodotti rimossi
-    prevItems.forEach(prev => {
-      if (!prev || !prev.id) return;
+      await deleteDoc(doc(db, 'weeks', week, 'lists', day));
       
-      const curr = currItems.find(c => c.id === prev.id);
-      if (!curr) {
-        const product = this.products.find(p => p.id === prev.id);
-        notifications.push({
-          type: 'removed',
-          id: prev.id,
-          name: product?.name || prev.id,
-          quantity: prev.quantity,
-          atVersion: this.currentList.version
-        });
-      }
-    });
-    
-    // Confronta extras
-    const prevExtras = previousList.extras || [];
-    const currExtras = this.currentList.extras || [];
-    
-    currExtras.forEach(curr => {
-      if (!curr || !curr.name) return;
+      localStorage.removeItem(`list-${week}-${day}`);
       
-      const prev = prevExtras.find(p => p.name === curr.name);
-      if (!prev) {
-        notifications.push({
-          type: 'extraAdded',
-          name: curr.name,
-          quantity: curr.quantity,
-          atVersion: this.currentList.version
-        });
-      } else if (prev.quantity !== curr.quantity) {
-        notifications.push({
-          type: 'extraChanged',
-          name: curr.name,
-          oldQuantity: prev.quantity,
-          newQuantity: curr.quantity,
-          atVersion: this.currentList.version
-        });
-      }
-    });
-    
-    prevExtras.forEach(prev => {
-      if (!prev || !prev.name) return;
+      this.currentList = { items: [], extras: [], status: {}, version: 0 };
       
-      const curr = currExtras.find(c => c.name === prev.name);
-      if (!curr) {
-        notifications.push({
-          type: 'extraRemoved',
-          name: prev.name,
-          quantity: prev.quantity,
-          atVersion: this.currentList.version
-        });
-      }
-    });
-    
-    // Salva notifiche
-    if (notifications.length > 0) {
-      try {
-        const notifDocId = `${week}_${day}`;
-        
-        for (const notif of notifications) {
-          const notifId = `${notif.type}_${notif.id || notif.name}_${notif.atVersion}`;
-          await setDoc(doc(db, 'notifications', notifDocId, 'entries', notifId), {
-            ...notif,
-            timestamp: Timestamp.now(),
-            read: false
-          });
-        }
-        
-        // Aggiorna counter
-        const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
-        const currentCount = notifDoc.exists() ? (notifDoc.data().unreadCount || 0) : 0;
-        
-        await setDoc(doc(db, 'notifications', notifDocId), {
-          unreadCount: currentCount + notifications.length,
-          lastUpdate: Timestamp.now()
-        }, { merge: true });
-      } catch (error) {
-        console.error('Errore salvataggio notifiche:', error);
-        // Non bloccare il salvataggio della lista per errori nelle notifiche
-      }
+      this.renderProducts();
+      this.renderExtras();
+      
+      showToast('Lista eliminata con successo', 'success');
+    } catch (error) {
+      console.error('Errore eliminazione lista:', error);
+      showToast('Errore durante l\'eliminazione della lista', 'error');
     }
   }
 
@@ -1262,78 +679,8 @@ class ListaManager {
       errorEl.classList.remove('hidden');
       setTimeout(() => errorEl.classList.add('hidden'), 5000);
     }
-    // Fallback con toast se elemento non trovato
     showToast(message, 'error');
-    
-    // Log error for debugging
-    console.error('Lista Error:', message);
-  }
-  
-  // Cleanup method
-  destroy() {
-    if (this.autoSaveTimeout) {
-      clearTimeout(this.autoSaveTimeout);
-    }
-    if (this.renderTimeout) {
-      clearTimeout(this.renderTimeout);
-    }
-    
-    // Clear caches
-    listCache.clear();
-    productRenderCache.clear();
-  }
-  
-  // Add delete list functionality for testing
-  async deleteCurrentList() {
-    if (!confirm('Sei sicuro di voler eliminare la lista corrente? Questa azione non può essere annullata.')) {
-      return;
-    }
-    
-    try {
-      const week = getWeekString(this.selectedDate);
-      const day = formatDate(this.selectedDate);
-      
-      // Delete from Firestore
-      const { deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-      await deleteDoc(doc(db, 'weeks', week, 'lists', day));
-      
-      // Clear local storage
-      localStorage.removeItem(`list-${week}-${day}`);
-      
-      // Clear cache
-      const cacheKey = `${week}-${day}`;
-      listCache.delete(cacheKey);
-      
-      // Reset current list
-      this.currentList = { items: [], extras: [], status: {}, version: 0 };
-      
-      // Re-render
-      this.throttledRender();
-      this.renderExtras();
-      
-      showToast('Lista eliminata con successo', 'success');
-    } catch (error) {
-      console.error('Errore eliminazione lista:', error);
-      showToast('Errore durante l\'eliminazione della lista', 'error');
-    }
   }
 }
 
-// Handle page unload
-window.addEventListener('beforeunload', () => {
-  if (window.listaManager) {
-    window.listaManager.destroy();
-  }
-});
-
-// Handle orientation changes
-window.addEventListener('orientationchange', () => {
-  setTimeout(() => {
-    if (window.listaManager) {
-      window.listaManager.throttledRender();
-    }
-  }, 100);
-});
-
-// Inizializza l'applicazione
 window.listaManager = new ListaManager();

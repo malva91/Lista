@@ -1,15 +1,10 @@
-import { db } from '../shared/firebase.js';
+import { db } from '../shared/firebase.js?v=1.2.0';
 import { 
-  collection, doc, getDocs, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc,
+  collection, doc, getDocs, getDoc, setDoc, onSnapshot, deleteDoc,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { formatDate, getWeekString, getDayName, showToast } from '../shared/utils.js';
-import { safeQuerySelector, safeAddEventListener, validateInput, isMobile, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme } from '../shared/utils.js';
-
-// Cache per migliorare le performance
-const checklistCache = new Map();
-const notificationCache = new Map();
-const renderCache = new Map();
+import { formatDate, getWeekString, getDayName, showToast, getContrastColor } from '../shared/utils.js?v=1.2.0';
+import { safeQuerySelector, safeAddEventListener, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.2.0';
 
 class MagazzinoManager {
   constructor() {
@@ -17,118 +12,43 @@ class MagazzinoManager {
     this.categories = [];
     this.products = [];
     this.currentList = null;
-    this.currentChecklist = { items: [] };
     this.notifications = [];
-    this.unreadCount = 0;
-    this.collapsedCategories = new Set(); // Track collapsed categories
-    
-    // Performance optimizations
-    this.renderQueue = [];
-    this.isRendering = false;
-    this.lastRenderTime = 0;
-    this.renderThrottle = 16; // ~60fps
     
     this.init();
   }
 
   async init() {
-    // Initialize mobile utilities
     initMobileUtils();
-    
-    // Initialize theme
     initTheme();
-    
-    // Preload critical data
-    preloadCriticalData();
+    initHamburgerMenu();
     
     this.setupDateSelector();
     this.setupEventListeners();
     
-    // Load data with optimized strategy
-    await this.loadDataOptimized();
+    document.getElementById('loadingList').classList.remove('hidden');
     
+    await this.loadData();
     await this.loadCurrentList();
     await this.loadNotifications();
   }
   
-  async loadDataOptimized() {
+  async loadData() {
     try {
-      // Try to load from cache first
-      const [cachedCategories, cachedProducts] = await Promise.all([
-        getCachedCategories(),
-        getCachedProducts()
-      ]);
-      
-      // Use cached data if valid
-      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
-        this.categories = cachedCategories.categories;
-      }
-      
-      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
-        this.products = cachedProducts.products;
-      }
-      
-      // Load fresh data in background if cache is invalid or empty
-      const needsFreshCategories = !cachedCategories.isValid || cachedCategories.categories.length === 0;
-      const needsFreshProducts = !cachedProducts.isValid || cachedProducts.products.length === 0;
-      
-      if (needsFreshCategories || needsFreshProducts) {
-        const promises = [];
-        
-        if (needsFreshCategories) {
-          promises.push(this.loadCategories(true));
-        }
-        
-        if (needsFreshProducts) {
-          promises.push(this.loadProducts(true));
-        }
-        
-        await Promise.allSettled(promises);
-      }
-      
-    } catch (error) {
-      console.error('Errore caricamento dati ottimizzato:', error);
-      // Fallback to normal loading
-      await Promise.allSettled([
+      await Promise.all([
         this.loadCategories(),
         this.loadProducts()
       ]);
+    } catch (error) {
+      console.error('Errore caricamento dati:', error);
+      this.showError('Errore nel caricamento dei dati');
     }
-  }
-
-  // Throttled rendering per migliorare performance
-  throttledRender() {
-    const now = Date.now();
-    if (now - this.lastRenderTime < this.renderThrottle) {
-      if (!this.renderTimeout) {
-        this.renderTimeout = setTimeout(() => {
-          this.renderTimeout = null;
-          this.performRender();
-        }, this.renderThrottle);
-      }
-      return;
-    }
-    
-    this.performRender();
-  }
-  
-  performRender() {
-    this.lastRenderTime = Date.now();
-    
-    // Use requestAnimationFrame for smooth rendering
-    requestAnimationFrame(() => {
-      this.renderChecklist();
-    });
   }
 
   setupDateSelector() {
     const dateSelector = safeQuerySelector('#dateSelector');
     const currentDateEl = safeQuerySelector('#currentDate');
     
-    if (!dateSelector || !currentDateEl) {
-      console.error('Elementi date selector non trovati');
-      return;
-    }
+    if (!dateSelector || !currentDateEl) return;
     
     dateSelector.value = formatDate(this.selectedDate);
     currentDateEl.textContent = `${getDayName(this.selectedDate)} ${formatDate(this.selectedDate)}`;
@@ -136,17 +56,6 @@ class MagazzinoManager {
     safeAddEventListener(dateSelector, 'change', (e) => {
       this.selectedDate = new Date(e.target.value);
       currentDateEl.textContent = `${getDayName(this.selectedDate)} ${formatDate(this.selectedDate)}`;
-      
-      // Clear caches when date changes
-      checklistCache.clear();
-      notificationCache.clear();
-      renderCache.clear();
-      
-      // Rimuovi listener precedenti prima di caricare nuova data
-      if (this.listenerUnsubscribes) {
-        this.listenerUnsubscribes.forEach(unsubscribe => unsubscribe());
-      }
-      
       this.loadCurrentList();
       this.loadNotifications();
     });
@@ -155,90 +64,32 @@ class MagazzinoManager {
   setupEventListeners() {
     const markAllReadBtn = safeQuerySelector('#markAllReadBtn');
     if (markAllReadBtn) {
-      safeAddEventListener(markAllReadBtn, 'click', () => {
-        this.markAllNotificationsRead();
-      });
-    }
-
-    // Global controls for expand/collapse
-    const expandAllBtn = safeQuerySelector('#expandAllBtn');
-    if (expandAllBtn) {
-      safeAddEventListener(expandAllBtn, 'click', () => {
-        this.expandAllCategories();
-      });
-    }
-
-    const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
-    if (collapseAllBtn) {
-      safeAddEventListener(collapseAllBtn, 'click', () => {
-        this.collapseAllCategories();
-      });
+      safeAddEventListener(markAllReadBtn, 'click', () => this.markAllNotificationsRead());
     }
   }
 
-  async loadCategories(updateCache = false) {
+  async loadCategories() {
     try {
-      // Use cached data if available and not updating
-      if (!updateCache && this.categories.length > 0) {
-        return;
-      }
-      
       const categoriesSnap = await getDocs(collection(db, 'categories'));
-      const newCategories = categoriesSnap.docs.map(doc => ({
+      this.categories = categoriesSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
-      
-      // Validazione dei dati delle categorie
-      const validCategories = newCategories.filter(category => {
-        if (!category.name || !category.colorHex) {
-          console.warn('Categoria con dati mancanti ignorata:', category);
-          return false;
-        }
-        return true;
-      });
-      
-      this.categories = validCategories;
-      
-      // Update IndexedDB cache
-      if (updateCache) {
-        setCachedCategories(this.categories);
-      }
+      })).filter(category => category.name && category.colorHex);
     } catch (error) {
       console.error('Errore caricamento categorie:', error);
       this.categories = [];
     }
   }
 
-  async loadProducts(updateCache = false) {
+  async loadProducts() {
     try {
-      // Use cached data if available and not updating
-      if (!updateCache && this.products.length > 0) {
-        return;
-      }
-      
       const productsQuery = query(collection(db, 'products'), where('active', '==', true));
       const productsSnap = await getDocs(productsQuery);
-      const newProducts = productsSnap.docs.map(doc => ({
+      this.products = productsSnap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })).sort((a, b) => a.name.localeCompare(b.name));
-      
-      // Validazione dei dati dei prodotti
-      const validProducts = newProducts.filter(product => {
-        if (!product.name || !product.categoryId) {
-          console.warn('Prodotto con dati mancanti ignorato:', product);
-          return false;
-        }
-        return true;
-      });
-      
-      this.products = validProducts;
-      
-      // Update IndexedDB cache
-      if (updateCache) {
-        setCachedProducts(this.products);
-      }
+      })).filter(product => product.name && product.categoryId)
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch (error) {
       console.error('Errore caricamento prodotti:', error);
       this.products = [];
@@ -246,100 +97,25 @@ class MagazzinoManager {
   }
 
   async loadCurrentList() {
-    // Rimuovi listener esistenti se presenti
-    if (this.listenerUnsubscribes) {
-      this.listenerUnsubscribes.forEach(unsubscribe => unsubscribe());
-    }
-    this.listenerUnsubscribes = [];
-    
     try {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
-      // Check cache first
-      const cacheKey = `${week}-${day}`;
-      if (checklistCache.has(cacheKey)) {
-        const cached = checklistCache.get(cacheKey);
-        this.currentList = cached.list;
-        this.currentChecklist = cached.checklist;
-        this.throttledRender();
-        document.getElementById('loadingList').classList.add('hidden');
-        document.getElementById('checklistContainer').classList.remove('hidden');
-        document.getElementById('emptyState').classList.add('hidden');
-        this.setupRealtimeListeners();
-        return;
-      }
-      
-      // Carica lista dipendenti
       const listDoc = await getDoc(doc(db, 'weeks', week, 'lists', day));
       
       if (listDoc.exists()) {
         this.currentList = listDoc.data();
-        await this.loadChecklist();
-        
-        // Cache the result
-        checklistCache.set(cacheKey, {
-          list: this.currentList,
-          checklist: this.currentChecklist
-        });
-        
-        // Limit cache size
-        if (checklistCache.size > 10) {
-          const firstKey = checklistCache.keys().next().value;
-          checklistCache.delete(firstKey);
-        }
-        
-        this.throttledRender();
-        document.getElementById('loadingList').classList.add('hidden');
-        document.getElementById('checklistContainer').classList.remove('hidden');
-        document.getElementById('emptyState').classList.add('hidden');
+        this.renderChecklist();
       } else {
         this.currentList = null;
-        document.getElementById('loadingList').classList.add('hidden');
-        document.getElementById('checklistContainer').classList.add('hidden');
-        document.getElementById('emptyState').classList.remove('hidden');
+        this.showEmptyState();
       }
       
-      // Configura listener dopo il caricamento iniziale
-      this.setupRealtimeListeners();
-      
+      document.getElementById('loadingList').classList.add('hidden');
     } catch (error) {
       console.error('Errore caricamento lista:', error);
       this.showError('Errore nel caricamento della lista');
-    }
-  }
-
-  async loadChecklist() {
-    try {
-      const week = getWeekString(this.selectedDate);
-      const day = formatDate(this.selectedDate);
-      
-      const checklistDoc = await getDoc(doc(db, 'weeks', week, 'warehouse', day));
-      
-      if (checklistDoc.exists()) {
-        this.currentChecklist = checklistDoc.data();
-      } else {
-        // Inizializza checklist da lista dipendenti
-        this.currentChecklist = {
-          items: this.currentList.items.map(item => ({
-            id: item.id,
-            qtyRequested: item.quantity,
-            qtyPicked: 0,
-            prepared: false
-          })),
-          extras: this.currentList.extras.map(extra => ({
-            name: extra.name,
-            qtyRequested: extra.quantity,
-            qtyPicked: 0,
-            prepared: false
-          }))
-        };
-        
-        // Salva checklist iniziale
-        await setDoc(doc(db, 'weeks', week, 'warehouse', day), this.currentChecklist);
-      }
-    } catch (error) {
-      console.error('Errore caricamento checklist:', error);
+      document.getElementById('loadingList').classList.add('hidden');
     }
   }
 
@@ -349,259 +125,36 @@ class MagazzinoManager {
       const day = formatDate(this.selectedDate);
       const notifDocId = `${week}_${day}`;
       
-      // Check cache first
-      if (notificationCache.has(notifDocId)) {
-        const cached = notificationCache.get(notifDocId);
-        this.notifications = cached.notifications;
-        this.unreadCount = cached.unreadCount;
-        this.renderNotifications();
-        return;
-      }
-      
-      // Carica counter
       const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
-      this.unreadCount = notifDoc.exists() ? (notifDoc.data().unreadCount || 0) : 0;
       
-      // Carica notifiche
-      const notificationsQuery = query(
-        collection(db, 'notifications', notifDocId, 'entries'),
-        orderBy('timestamp', 'desc')
-      );
-      const notifSnap = await getDocs(notificationsQuery);
-      
-      this.notifications = notifSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      // Cache the result
-      notificationCache.set(notifDocId, {
-        notifications: this.notifications,
-        unreadCount: this.unreadCount
-      });
-      
-      // Limit cache size
-      if (notificationCache.size > 10) {
-        const firstKey = notificationCache.keys().next().value;
-        notificationCache.delete(firstKey);
+      if (notifDoc.exists()) {
+        const notifData = notifDoc.data();
+        
+        // Load notification entries
+        const entriesSnap = await getDocs(collection(db, 'notifications', notifDocId, 'entries'));
+        this.notifications = entriesSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+        
+        this.renderNotifications(notifData.unreadCount || 0);
+      } else {
+        this.notifications = [];
+        this.hideNotifications();
       }
-      
-      this.renderNotifications();
     } catch (error) {
       console.error('Errore caricamento notifiche:', error);
+      this.notifications = [];
+      this.hideNotifications();
     }
   }
 
-  setupRealtimeListeners() {
-    const week = getWeekString(this.selectedDate);
-    const day = formatDate(this.selectedDate);
-    const notifDocId = `${week}_${day}`;
-    
-    // Array per tenere traccia degli unsubscribe
-    if (!this.listenerUnsubscribes) {
-      this.listenerUnsubscribes = [];
-    }
-    
-    // Listener per la lista dipendenti
-    const listDocRef = doc(db, 'weeks', week, 'lists', day);
-    const listUnsubscribe = onSnapshot(listDocRef, async (docSnapshot) => {
-      console.log('Lista dipendenti cambiata:', docSnapshot.exists());
-      
-      try {
-        if (docSnapshot.exists()) {
-        const newList = docSnapshot.data();
-        console.log('Nuova lista:', newList);
-        
-        // Aggiorna sempre per riflettere in tempo reale le modifiche
-        this.currentList = newList;
-        
-        // Clear cache
-        const cacheKey = `${week}-${day}`;
-        checklistCache.delete(cacheKey);
-        renderCache.clear();
-        
-          await this.syncChecklistWithList();
-          this.throttledRender();
-          console.log('Checklist aggiornata in tempo reale');
-        } else {
-        // Lista eliminata
-        console.log('Lista eliminata');
-        this.currentList = null;
-        this.currentChecklist = { items: [], extras: [] };
-        
-        // Clear cache
-        const cacheKey = `${week}-${day}`;
-        checklistCache.delete(cacheKey);
-        renderCache.clear();
-        
-        const checklistContainer = document.getElementById('checklistContainer');
-        const emptyState = document.getElementById('emptyState');
-        if (checklistContainer) checklistContainer.classList.add('hidden');
-        if (emptyState) emptyState.classList.remove('hidden');
-        }
-      } catch (error) {
-        console.error('Errore nel listener della lista dipendenti:', error);
-      }
-    }, (error) => {
-      console.error('Errore nel listener della lista dipendenti:', error);
-    });
-    this.listenerUnsubscribes.push(listUnsubscribe);
-    
-    // Listener per la checklist warehouse (per sincronizzare modifiche del magazziniere)
-    const warehouseDocRef = doc(db, 'weeks', week, 'warehouse', day);
-    const warehouseUnsubscribe = onSnapshot(warehouseDocRef, (docSnapshot) => {
-      console.log('Checklist warehouse cambiata:', docSnapshot.exists());
-      
-      try {
-        if (docSnapshot.exists()) {
-        const newChecklist = docSnapshot.data();
-        console.log('Nuova checklist:', newChecklist);
-        
-        // Aggiorna solo se non è una modifica locale
-        if (JSON.stringify(newChecklist) !== JSON.stringify(this.currentChecklist)) {
-          this.currentChecklist = newChecklist;
-          
-          // Clear cache
-          const cacheKey = `${week}-${day}`;
-          checklistCache.delete(cacheKey);
-          renderCache.clear();
-          
-          this.throttledRender();
-          console.log('UI aggiornata da modifica esterna');
-        }
-        }
-      } catch (error) {
-        console.error('Errore nel listener della checklist warehouse:', error);
-      }
-    }, (error) => {
-      console.error('Errore nel listener della checklist warehouse:', error);
-    });
-    this.listenerUnsubscribes.push(warehouseUnsubscribe);
-    
-    // Listener per notifiche
-    const notificationsRef = collection(db, 'notifications', notifDocId, 'entries');
-    const notifUnsubscribe = onSnapshot(query(notificationsRef, orderBy('timestamp', 'desc')), (querySnapshot) => {
-      console.log('Notifiche cambiate:', querySnapshot.size);
-      
-      try {
-        this.notifications = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      // Calcola non lette
-      this.unreadCount = this.notifications.filter(n => !n.read).length;
-      
-      // Clear notification cache
-      notificationCache.delete(notifDocId);
-      
-      this.renderNotifications();
-      console.log('Notifiche aggiornate:', this.unreadCount, 'non lette');
-      } catch (error) {
-        console.error('Errore nel listener delle notifiche:', error);
-      }
-    }, (error) => {
-      console.error('Errore nel listener delle notifiche:', error);
-    });
-    this.listenerUnsubscribes.push(notifUnsubscribe);
-  }
-  
-  computeCompletion() {
-    if (!this.currentChecklist) {
-      return { total: 0, completed: 0, percent: 0, complete: false };
-    }
-    
-    const items = this.currentChecklist.items || [];
-    const extras = this.currentChecklist.extras || [];
-    const all = items.concat(extras);
-    const total = all.length || 0;
-    const completed = all.filter(e => (e.qtyPicked || 0) >= (e.qtyRequested || 0)).length;
-    const percent = total ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, percent, complete: total > 0 && completed === total };
-  }
-
-
-  async syncChecklistWithList() {
-    if (!this.currentList) return;
-    
-    console.log('Sincronizzando checklist con lista...');
-    
-    const week = getWeekString(this.selectedDate);
-    const day = formatDate(this.selectedDate);
-    
-    // Ensure currentChecklist exists
-    if (!this.currentChecklist) {
-      this.currentChecklist = { items: [], extras: [] };
-    }
-    
-    if (!this.currentChecklist.items) {
-      this.currentChecklist.items = [];
-    }
-    
-    if (!this.currentChecklist.extras) {
-      this.currentChecklist.extras = [];
-    }
-    
-    // Aggiorna items esistenti e aggiungi nuovi
-    const updatedItems = (this.currentList.items || []).map(listItem => {
-      if (!listItem || !listItem.id) return null;
-      
-      const existingItem = this.currentChecklist.items.find(ci => ci.id === listItem.id);
-      return existingItem ? { ...existingItem, qtyRequested: listItem.quantity, prepared: (existingItem.qtyPicked || 0) >= listItem.quantity } :
-        { id: listItem.id, qtyRequested: listItem.quantity, qtyPicked: 0, prepared: false };
-    }).filter(Boolean);
-    
-    const updatedExtras = (this.currentList.extras || []).map(listExtra => {
-      if (!listExtra || !listExtra.name) return null;
-      
-      const existingExtra = (this.currentChecklist.extras || []).find(ce => ce.name === listExtra.name);
-      return existingExtra ? { ...existingExtra, qtyRequested: listExtra.quantity, prepared: (existingExtra.qtyPicked || 0) >= listExtra.quantity } :
-        { name: listExtra.name, qtyRequested: listExtra.quantity, qtyPicked: 0, prepared: false };
-    }).filter(Boolean);
-    
-    // Rimuovi items che non sono più nella lista
-    const validItemIds = (this.currentList.items || []).map(item => item?.id).filter(Boolean);
-    const filteredItems = updatedItems.filter(item => validItemIds.includes(item.id));
-    
-    // Rimuovi extras che non sono più nella lista
-    const validExtraNames = (this.currentList.extras || []).map(extra => extra?.name).filter(Boolean);
-    const filteredExtras = updatedExtras.filter(extra => validExtraNames.includes(extra.name));
-    
-    this.currentChecklist.items = filteredItems;
-    this.currentChecklist.extras = filteredExtras || [];
-    
-    console.log('Checklist sincronizzata:', this.currentChecklist);
-    
-    // Salva checklist aggiornata
-    try {
-      await setDoc(doc(db, 'weeks', week, 'warehouse', day), this.currentChecklist);
-      
-      // Update cache
-      const cacheKey = `${week}-${day}`;
-      checklistCache.set(cacheKey, {
-        list: this.currentList,
-        checklist: this.currentChecklist
-      });
-    } catch (error) {
-      console.error('Errore salvataggio checklist sincronizzata:', error);
-      // Save to local storage as fallback
-      try {
-        localStorage.setItem(`checklist-${week}-${day}`, JSON.stringify(this.currentChecklist));
-      } catch (storageError) {
-        console.warn('Errore salvataggio locale checklist:', storageError);
-      }
-    }
-  }
-
-  renderNotifications() {
+  renderNotifications(unreadCount) {
     const panel = safeQuerySelector('#notificationPanel');
     const badge = safeQuerySelector('#notificationBadge');
     const list = safeQuerySelector('#notificationList');
     
-    if (!panel || !badge || !list) {
-      console.warn('Elementi notifiche non trovati');
-      return;
-    }
+    if (!panel || !badge || !list) return;
     
     if (this.notifications.length === 0) {
       panel.classList.add('hidden');
@@ -609,883 +162,414 @@ class MagazzinoManager {
     }
     
     panel.classList.remove('hidden');
-    badge.textContent = `${this.unreadCount} non lette`;
-    
-    // Separa lette e non lette
-    const unreadNotifications = this.notifications.filter(n => !n.read);
-    const readNotifications = this.notifications.filter(n => n.read);
+    badge.textContent = `${unreadCount} non lette`;
     
     list.innerHTML = '';
     
-    // Mostra non lette prima
-    [...unreadNotifications, ...readNotifications].forEach(notification => {
-      const notifEl = this.createNotificationElement(notification);
-      list.appendChild(notifEl);
-    });
-  }
-
-  createNotificationElement(notification) {
-    const div = document.createElement('div');
-    div.className = `notification-item notification-${notification.type.replace(/([A-Z])/g, '-$1').toLowerCase()} ${notification.read ? 'read' : ''}`;
-    
-    let icon = '';
-    let message = '';
-    
-    switch (notification.type) {
-      case 'added':
-        icon = '✅';
-        message = `Aggiunto: ${notification.name} (${notification.quantity})`;
-        break;
-      case 'removed':
-        icon = '❌';
-        message = `Rimosso: ${notification.name} (era ${notification.quantity})`;
-        break;
-      case 'qtyChanged':
-        icon = '🔄';
-        message = `${notification.name}: ${notification.oldQuantity} → ${notification.newQuantity}`;
-        break;
-      case 'extraAdded':
-        icon = '➕';
-        message = `Extra aggiunto: ${notification.name} (${notification.quantity})`;
-        break;
-      case 'extraRemoved':
-        icon = '➖';
-        message = `Extra rimosso: ${notification.name} (era ${notification.quantity})`;
-        break;
-      case 'extraChanged':
-        icon = '🔄';
-        message = `Extra ${notification.name}: ${notification.oldQuantity} → ${notification.newQuantity}`;
-        break;
-    }
-    
-    div.innerHTML = `
-      <div class="flex justify-between">
-        <div>
-          <span style="margin-right: 0.5rem;">${icon}</span>
-          ${message}
-        </div>
-        ${!notification.read ? `
-          <button class="btn btn-secondary mark-read-btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" 
-                  data-notification-id="${notification.id}">
-            Segna come letta
-          </button>
-        ` : ''}
-      </div>
-      <div class="text-muted" style="font-size: 0.875rem; margin-top: 0.25rem;">
-        ${(notification.timestamp && notification.timestamp.toDate ? notification.timestamp.toDate().toLocaleString() : '')}
-      </div>
-    `;
-    
-    // Add event listener
-    const markReadBtn = div.querySelector('.mark-read-btn');
-    if (markReadBtn) {
-      markReadBtn.addEventListener('click', () => this.markNotificationRead(notification.id));
-    }
-    
-    return div;
-  }
-
-  // Optimized checklist rendering with caching
-  renderChecklist() {
-    const container = safeQuerySelector('#checklistContainer');
-    
-    if (!container) {
-      console.error('Container checklistContainer non trovato');
-      return;
-    }
-    
-    if (!this.currentList) {
-      container.innerHTML = '';
-      return;
-    }
-    
-    // Create cache key for current checklist state
-    const cacheKey = JSON.stringify({
-      items: this.currentChecklist.items,
-      extras: this.currentChecklist.extras
-    });
-    
-    if (renderCache.has(cacheKey)) {
-      container.innerHTML = renderCache.get(cacheKey);
-      this.attachChecklistEventListeners(container);
-      return;
-    }
-    
-    // Use DocumentFragment for better performance
-    const fragment = document.createDocumentFragment();
-    
-    const headerDiv = document.createElement('div');
-    headerDiv.innerHTML = `
-      <div class="flex justify-between mb-3" style="align-items:center;">
-        <h2>📋 Checklist Prodotti</h2>
-        <div id="listStatus" style="min-width: 260px;">
-          <div class="flex justify-between" style="font-size: 0.9rem;">
-            <span class="text-secondary">Stato lista</span>
-            <span id="statusText"></span>
-          </div>
-          <div style="height: 10px; background: var(--bg-tertiary); border-radius: 6px; overflow: hidden;">
-            <div id="statusBar" style="height: 10px; width: 0%; background: #22c55e; transition: width .2s;"></div>
-          </div>
-        </div>
-      </div>
-    `;
-    fragment.appendChild(headerDiv);
-    
-    // Global Controls
-    const globalControlsDiv = document.createElement('div');
-    globalControlsDiv.className = 'global-controls';
-    globalControlsDiv.innerHTML = `
-      <button id="expandAllBtn" class="btn btn-secondary">📂 Apri Tutti</button>
-      <button id="collapseAllBtn" class="btn btn-secondary">📁 Chiudi Tutti</button>
-    `;
-    fragment.appendChild(globalControlsDiv);
-    
-    
-    // Aggiorna stato/progresso lista
-    const st = this.computeCompletion();
-    const statusTextEl = headerDiv.querySelector('#statusText');
-    const statusBarEl = headerDiv.querySelector('#statusBar');
-    if (statusTextEl && statusBarEl) {
-      statusTextEl.textContent = `${st.completed}/${st.total} completati (${st.percent}%)`;
-      statusBarEl.style.width = `${st.percent}%`;
-    }
-    if (st.complete) {
-      const banner = document.createElement('div');
-      banner.innerHTML = '✅ Lista completa!';
-      banner.style.background = 'rgba(34, 197, 94, 0.15)';
-      banner.style.border = '1px solid #22c55e';
-      banner.style.color = '#16a34a';
-      banner.style.padding = '0.5rem 0.75rem';
-      banner.style.borderRadius = '6px';
-      banner.style.marginBottom = '0.5rem';
-      fragment.insertBefore(banner, fragment.firstChild);
-    }
-    // Use Map for better performance
-    const groupedItems = new Map();
-    
-    this.currentChecklist.items.forEach(item => {
-      const product = this.products.find(p => p.id === item.id);
-      if (!product) return;
+    this.notifications.forEach(notification => {
+      const notifDiv = document.createElement('div');
+      notifDiv.className = `notification-item ${notification.read ? 'read' : ''}`;
       
-      const categoryId = product.categoryId;
-      if (!groupedItems.has(categoryId)) {
-        groupedItems.set(categoryId, []);
+      let message = '';
+      let className = '';
+      
+      switch (notification.type) {
+        case 'added':
+          message = `➕ Aggiunto: ${notification.name} (${notification.quantity})`;
+          className = 'notification-added';
+          break;
+        case 'removed':
+          message = `➖ Rimosso: ${notification.name} (${notification.quantity})`;
+          className = 'notification-removed';
+          break;
+        case 'qtyChanged':
+          message = `🔄 Modificato: ${notification.name} (${notification.oldQuantity} → ${notification.newQuantity})`;
+          className = 'notification-changed';
+          break;
+        case 'extraAdded':
+          message = `➕ Extra aggiunto: ${notification.name} (${notification.quantity})`;
+          className = 'notification-added';
+          break;
+        case 'extraRemoved':
+          message = `➖ Extra rimosso: ${notification.name} (${notification.quantity})`;
+          className = 'notification-removed';
+          break;
+        case 'extraChanged':
+          message = `🔄 Extra modificato: ${notification.name} (${notification.oldQuantity} → ${notification.newQuantity})`;
+          className = 'notification-changed';
+          break;
+        default:
+          message = `📝 ${notification.type}: ${notification.name}`;
+          className = 'notification-changed';
       }
-      groupedItems.get(categoryId).push({ ...item, product });
-    });
-    
-    // Sort categories alphabetically and render
-    const sortedCategoryEntries = Array.from(groupedItems.entries()).sort(([categoryIdA], [categoryIdB]) => {
-      const categoryA = this.categories.find(c => c.id === categoryIdA);
-      const categoryB = this.categories.find(c => c.id === categoryIdB);
-      if (!categoryA || !categoryB) return 0;
-      return categoryA.name.localeCompare(categoryB.name);
-    });
-    
-    sortedCategoryEntries.forEach(([categoryId, items]) => {
-      const category = this.categories.find(c => c.id === categoryId);
-      if (!category) return;
       
-      const isCollapsed = this.collapsedCategories.has(categoryId);
-      
-      // Sort items within category alphabetically
-      items.sort((a, b) => a.product.name.localeCompare(b.product.name));
-      
-      const categorySection = document.createElement('div');
-      categorySection.className = 'category-section mb-4';
-      categorySection.style.cssText = `
-        background: linear-gradient(135deg, ${category.colorHex}05 0%, transparent 100%);
-        border: 1px solid ${category.colorHex}20;
-        border-radius: 12px;
-        margin-bottom: 2rem;
-      `;
-      
-      const categoryHeader = document.createElement('div');
-      categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
-      categoryHeader.innerHTML = `
-        <div class="category-title">
-          <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
-          <div class="category-color-indicator" style="background: ${category.colorHex};"></div>
-          <h3 style="color: ${category.colorHex}; margin: 0;">📂 ${category.name}</h3>
-        </div>
-        <div class="category-actions">
-          <button class="btn btn-primary mark-category-complete-btn" data-category-id="${categoryId}"
-                  style="padding: 0.5rem 1rem;">Segna tutti</button>
+      notifDiv.classList.add(className);
+      notifDiv.innerHTML = `
+        <div style="font-weight: 600; margin-bottom: 0.25rem;">${message}</div>
+        <div style="font-size: 0.75rem; opacity: 0.8;">
+          ${notification.timestamp.toDate().toLocaleString('it-IT')}
         </div>
       `;
       
-      // Add click handler for toggle (but not on the button)
-      categoryHeader.addEventListener('click', (e) => {
-        if (!e.target.closest('.mark-category-complete-btn')) {
-          this.toggleCategory(categoryId);
-        }
-      });
-      
-      categorySection.appendChild(categoryHeader);
-      
-      const categoryContent = document.createElement('div');
-      categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
-      categoryContent.style.padding = '1rem';
-      
-      items.forEach(item => {
-        const itemCard = this.createChecklistItemCard(item);
-        categoryContent.appendChild(itemCard);
-      });
-      
-      categorySection.appendChild(categoryContent);
-      
-      fragment.appendChild(categorySection);
-    });
-    
-    // Delete List Button - Positioned after categories
-    const deleteListDiv = document.createElement('div');
-    deleteListDiv.className = 'delete-list-container';
-    deleteListDiv.innerHTML = `
-      <button class="btn btn-error delete-list-btn">
-        🗑️ Elimina Lista
-      </button>
-    `;
-    fragment.appendChild(deleteListDiv);
-    
-    // Render extras
-    if (this.currentChecklist.extras && this.currentChecklist.extras.length > 0) {
-      const extrasSection = document.createElement('div');
-      extrasSection.className = 'mb-4';
-      
-      const extrasHeader = document.createElement('h3');
-      extrasHeader.textContent = '➕ Prodotti Extra';
-      extrasHeader.className = 'mb-2';
-      extrasSection.appendChild(extrasHeader);
-      
-      // Sort extras alphabetically
-      const sortedExtras = [...this.currentChecklist.extras].sort((a, b) => a.name.localeCompare(b.name));
-      
-      sortedExtras.forEach((extra) => {
-        const originalIndex = this.currentChecklist.extras.findIndex(e => e.name === extra.name);
-        const extraCard = this.createExtraItemCard(extra, originalIndex);
-        extrasSection.appendChild(extraCard);
-      });
-      
-      fragment.appendChild(extrasSection);
-    }
-    
-    container.innerHTML = '';
-    container.appendChild(fragment);
-    
-    // Cache the rendered HTML
-    renderCache.set(cacheKey, container.innerHTML);
-    
-    // Limit cache size
-    if (renderCache.size > 5) {
-      const firstKey = renderCache.keys().next().value;
-      renderCache.delete(firstKey);
-    }
-    
-    // Attach event listeners
-    this.attachChecklistEventListeners(container);
-    
-    // Load collapsed state after rendering
-    this.loadCollapsedState();
-  }
-  
-  toggleCategory(categoryId) {
-    if (this.collapsedCategories.has(categoryId)) {
-      this.collapsedCategories.delete(categoryId);
-    } else {
-      this.collapsedCategories.add(categoryId);
-    }
-    
-    // Save state to localStorage
-    localStorage.setItem('magazzinoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
-    
-    this.throttledRender();
-  }
-
-  expandAllCategories() {
-    this.collapsedCategories.clear();
-    localStorage.setItem('magazzinoCollapsedCategories', JSON.stringify([]));
-    this.throttledRender();
-    showToast('Tutte le categorie espanse', 'success');
-  }
-
-  collapseAllCategories() {
-    // Add all category IDs to collapsed set
-    const categoryIds = [...new Set(this.currentChecklist.items.map(item => {
-      const product = this.products.find(p => p.id === item.id);
-      return product ? product.categoryId : null;
-    }).filter(Boolean))];
-    this.collapsedCategories = new Set(categoryIds);
-    localStorage.setItem('magazzinoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
-    this.throttledRender();
-    showToast('Tutte le categorie chiuse', 'success');
-  }
-
-  loadCollapsedState() {
-    try {
-      const saved = localStorage.getItem('magazzinoCollapsedCategories');
-      if (saved) {
-        this.collapsedCategories = new Set(JSON.parse(saved));
-      } else {
-        // Default: all categories collapsed
-        const categoryIds = [...new Set(this.currentChecklist.items.map(item => {
-          const product = this.products.find(p => p.id === item.id);
-          return product ? product.categoryId : null;
-        }).filter(Boolean))];
-        this.collapsedCategories = new Set(categoryIds);
-      }
-    } catch (error) {
-      console.warn('Errore caricamento stato categorie:', error);
-      this.collapsedCategories = new Set();
-    }
-  }
-  
-  // Attach event listeners after rendering from cache
-  attachChecklistEventListeners(container) {
-    // Delete list button
-    const deleteListBtn = container.querySelector('.delete-list-btn');
-    if (deleteListBtn) {
-      deleteListBtn.addEventListener('click', () => this.deleteList());
-    }
-    
-    // Global controls
-    const expandAllBtn = container.querySelector('#expandAllBtn');
-    if (expandAllBtn) {
-      expandAllBtn.addEventListener('click', () => this.expandAllCategories());
-    }
-    
-    const collapseAllBtn = container.querySelector('#collapseAllBtn');
-    if (collapseAllBtn) {
-      collapseAllBtn.addEventListener('click', () => this.collapseAllCategories());
-    }
-    
-    // Mark category complete buttons
-    const markCategoryBtns = container.querySelectorAll('.mark-category-complete-btn');
-    markCategoryBtns.forEach(btn => {
-      const categoryId = btn.dataset.categoryId;
-      if (categoryId) {
-        btn.addEventListener('click', () => this.markCategoryComplete(categoryId));
-      }
-    });
-    
-    // Quantity inputs
-    const qtyInputs = container.querySelectorAll('.qty-input');
-    qtyInputs.forEach(input => {
-      const itemId = input.dataset.itemId;
-      const extraIndex = input.dataset.extraIndex;
-      
-      if (itemId) {
-        input.addEventListener('change', (e) => {
-          this.updatePickedQuantity(itemId, parseInt(e.target.value) || 0);
-        });
-      } else if (extraIndex !== undefined) {
-        input.addEventListener('change', (e) => {
-          this.updateExtraPickedQuantity(parseInt(extraIndex), parseInt(e.target.value) || 0);
-        });
-      }
-    });
-    
-    // Toggle buttons
-    const toggleBtns = container.querySelectorAll('.toggle-prepared-btn');
-    toggleBtns.forEach(btn => {
-      const itemId = btn.dataset.itemId;
-      const extraIndex = btn.dataset.extraIndex;
-      
-      if (itemId) {
-        btn.addEventListener('click', () => this.toggleItemPrepared(itemId));
-      } else if (extraIndex !== undefined) {
-        btn.addEventListener('click', () => this.toggleExtraPrepared(parseInt(extraIndex)));
-      }
+      list.appendChild(notifDiv);
     });
   }
 
-  createChecklistItemCard(item) {
-    if (!item || !item.product) {
-      console.warn('Item o product mancante per card checklist');
-      return document.createElement('div');
-    }
-    
-    const card = document.createElement('div');
-    card.className = 'product-card';
-    
-    const isComplete = item.qtyPicked >= item.qtyRequested;
-    const backgroundStyle = isComplete ? 'background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e;' : 'background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444;';
-    
-    card.innerHTML = `
-      <div class="flex justify-between" style="${backgroundStyle} padding: 1rem; border-radius: 6px;">
-        <div style="flex: 1;">
-          <div class="product-name ${isComplete ? 'text-success' : ''}">
-            ${item.product.name}
-            ${isComplete ? ' ✅' : ''}
-          </div>
-          <div class="text-secondary">
-            Richiesto: ${item.qtyRequested} | Preparato: ${item.qtyPicked}
-          </div>
-        </div>
-        <div class="flex" style="align-items: center; gap: 1rem;">
-          <input type="number" value="${item.qtyPicked}" min="0" max="${item.qtyRequested}" 
-                 class="qty-input" style="width: 80px;"
-                 onchange="window.magazzinoManager.updatePickedQuantity('${item.id}', parseInt(this.value) || 0)">
-          <button class="btn ${item.prepared ? 'btn-success' : 'btn-secondary'} toggle-prepared-btn" 
-                  data-item-id="${item.id}"
-                  style="padding: 0.5rem 1rem;">
-            ${item.prepared ? 'Completato' : 'Prepara'}
-          </button>
-        </div>
-      </div>
-    `;
-    
-    return card;
-  }
-
-  createExtraItemCard(extra, index) {
-    if (!extra || typeof index !== 'number') {
-      console.warn('Extra o index mancante per card extra');
-      return document.createElement('div');
-    }
-    
-    const card = document.createElement('div');
-    card.className = 'product-card';
-    
-    const isComplete = extra.qtyPicked >= extra.qtyRequested;
-    const backgroundStyle = isComplete ? 'background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e;' : 'background: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444;';
-    
-    card.innerHTML = `
-      <div class="flex justify-between" style="${backgroundStyle} padding: 1rem; border-radius: 6px;">
-        <div style="flex: 1;">
-          <div class="product-name ${isComplete ? 'text-success' : ''}">
-            ${extra.name}
-            ${isComplete ? ' ✅' : ''}
-          </div>
-          <div class="text-secondary">
-            Richiesto: ${extra.qtyRequested} | Preparato: ${extra.qtyPicked}
-          </div>
-        </div>
-        <div class="flex" style="align-items: center; gap: 1rem;">
-          <input type="number" value="${extra.qtyPicked}" min="0" max="${extra.qtyRequested}" 
-                 class="qty-input" style="width: 80px;"
-                 onchange="window.magazzinoManager.updateExtraPickedQuantity(${index}, parseInt(this.value) || 0)">
-          <button class="btn ${extra.prepared ? 'btn-success' : 'btn-secondary'} toggle-prepared-btn" 
-                  data-extra-index="${index}"
-                  style="padding: 0.5rem 1rem;">
-            ${extra.prepared ? 'Completato' : 'Prepara'}
-          </button>
-        </div>
-      </div>
-    `;
-    
-    return card;
-  }
-
-  async updatePickedQuantity(itemId, newQuantity) {
-    // Validazione parametri
-    if (!itemId) {
-      console.error('ID item mancante');
-      showToast('Errore: ID item mancante', 'error');
-      return;
-    }
-    
-    // Ensure currentChecklist exists
-    if (!this.currentChecklist || !this.currentChecklist.items) {
-      console.error('Checklist non inizializzata');
-      showToast('Errore: checklist non inizializzata', 'error');
-      return;
-    }
-    
-    const item = this.currentChecklist.items.find(i => i.id === itemId);
-    if (!item) {
-      console.error('Item non trovato:', itemId);
-      showToast('Errore: item non trovato', 'error');
-      return;
-    }
-    
-    console.log(`Aggiornando quantità per ${itemId}: ${item.qtyPicked} -> ${newQuantity}`);
-    
-    // Validazione input con utility
-    const qtyValidation = validateInput(newQuantity, 'number', { min: 0, max: item.qtyRequested });
-    if (!qtyValidation.valid) {
-      showToast(qtyValidation.error, 'error');
-      return;
-    }
-    
-    item.qtyPicked = qtyValidation.value;
-    item.prepared = item.qtyPicked >= item.qtyRequested;
-    
-    // Clear render cache
-    renderCache.clear();
-    
-    try {
-      await this.saveChecklist();
-    } catch (error) {
-      console.error('Errore salvataggio checklist:', error);
-      showToast('Errore nel salvataggio', 'error');
-      return;
-    }
-    
-    // Forza re-render immediato per aggiornare colori
-    setTimeout(() => {
-      this.throttledRender();
-      console.log('UI aggiornata dopo modifica quantità');
-    }, 100);
-  }
-  async deleteList() {
-    // Miglioramento UX per mobile
-    const confirmMessage = isMobile() 
-      ? 'Eliminare la lista di oggi?\n\nL\'azione non può essere annullata.'
-      : 'Sei sicuro di voler eliminare la lista di oggi? L\'azione non può essere annullata.';
-      
-    try {
-      const confirmDelete = window.confirm(confirmMessage);
-      if (!confirmDelete) return;
-
-      // Disiscrivi eventuali listener attivi
-      if (this.listenerUnsubscribes) {
-        this.listenerUnsubscribes.forEach(unsub => {
-          try { unsub(); } catch (e) { /* ignore */ }
-        });
-      }
-
-      const week = getWeekString(this.selectedDate);
-      const day = formatDate(this.selectedDate);
-
-      // Elimina la checklist del magazzino e la lista dei dipendenti del giorno
-      try {
-        await deleteDoc(doc(db, 'weeks', week, 'warehouse', day));
-      } catch (e) {
-        console.warn('Nessuna checklist da eliminare o errore non bloccante:', e);
-      }
-      try {
-        await deleteDoc(doc(db, 'weeks', week, 'lists', day));
-      } catch (e) {
-        console.warn('Nessuna lista dipendenti da eliminare o errore non bloccante:', e);
-      }
-
-      // Clear all caches
-      const cacheKey = `${week}-${day}`;
-      checklistCache.delete(cacheKey);
-      const notifDocId = `${week}_${day}`;
-      notificationCache.delete(notifDocId);
-      renderCache.clear();
-      
-      // Reset stato locale e UI
-      this.currentList = null;
-      this.currentChecklist = { items: [], extras: [] };
-      this.notifications = [];
-      this.unreadCount = 0;
-
-      const container = safeQuerySelector('#checklistContainer');
-      const emptyState = safeQuerySelector('#emptyState');
-      const loading = safeQuerySelector('#loadingList');
-      if (container) container.classList.add('hidden');
-      if (emptyState) emptyState.classList.remove('hidden');
-      if (loading) loading.classList.add('hidden');
-
-      showToast('Lista eliminata correttamente', 'success');
-    } catch (error) {
-      console.error('Errore durante l\'eliminazione della lista:', error);
-      showToast('Errore durante l\'eliminazione della lista', 'error');
+  hideNotifications() {
+    const panel = safeQuerySelector('#notificationPanel');
+    if (panel) {
+      panel.classList.add('hidden');
     }
   }
 
-
-
-  
-  async saveChecklist() {
-    try {
-      const week = getWeekString(this.selectedDate);
-      const day = formatDate(this.selectedDate);
-      await setDoc(doc(db, 'weeks', week, 'warehouse', day), this.currentChecklist);
-      
-      // Update cache
-      const cacheKey = `${week}-${day}`;
-      checklistCache.set(cacheKey, {
-        list: this.currentList,
-        checklist: this.currentChecklist
-      });
-      
-      // Save to local storage as backup
-      try {
-        localStorage.setItem(`checklist-${week}-${day}`, JSON.stringify(this.currentChecklist));
-      } catch (storageError) {
-        console.warn('Errore salvataggio locale checklist:', storageError);
-      }
-      
-      console.log('Checklist salvata');
-    } catch (error) {
-      console.error('Errore salvataggio checklist:', error);
-      
-      // Try to save locally as fallback
-      try {
-        const week = getWeekString(this.selectedDate);
-        const day = formatDate(this.selectedDate);
-        localStorage.setItem(`checklist-${week}-${day}`, JSON.stringify(this.currentChecklist));
-        showToast('Salvato localmente (offline)', 'warning');
-      } catch (storageError) {
-        console.error('Errore anche nel salvataggio locale:', storageError);
-      }
-      showToast('Errore nel salvataggio', 'error');
-    }
-  }
-
-async updateExtraPickedQuantity(extraIndex, newQuantity) {
-    // Validazione parametri
-    if (extraIndex < 0 || !this.currentChecklist.extras || extraIndex >= this.currentChecklist.extras.length) {
-      console.error('Indice extra non valido:', extraIndex);
-      showToast('Errore: indice extra non valido', 'error');
-      return;
-    }
-    
-    if (!this.currentChecklist.extras[extraIndex]) {
-      console.error('Extra non trovato:', extraIndex);
-      showToast('Errore: extra non trovato', 'error');
-      return;
-    }
-    
-    console.log(`Aggiornando quantità extra ${extraIndex}: ${this.currentChecklist.extras[extraIndex].qtyPicked} -> ${newQuantity}`);
-    
-    const extra = this.currentChecklist.extras[extraIndex];
-    
-    // Validazione input con utility
-    const qtyValidation = validateInput(newQuantity, 'number', { min: 0, max: extra.qtyRequested });
-    if (!qtyValidation.valid) {
-      showToast(qtyValidation.error, 'error');
-      return;
-    }
-    
-    extra.qtyPicked = qtyValidation.value;
-    extra.prepared = extra.qtyPicked >= extra.qtyRequested;
-    
-    // Clear render cache
-    renderCache.clear();
-    
-    try {
-      await this.saveChecklist();
-    } catch (error) {
-      console.error('Errore salvataggio checklist:', error);
-      showToast('Errore nel salvataggio', 'error');
-      return;
-    }
-    
-    // Forza re-render immediato per aggiornare colori
-    setTimeout(() => {
-      this.throttledRender();
-      console.log('UI aggiornata dopo modifica quantità extra');
-    }, 100);
-  }
-
-  async toggleItemPrepared(itemId) {
-    if (!itemId) {
-      console.error('ID item mancante');
-      showToast('Errore: ID item mancante', 'error');
-      return;
-    }
-    
-    // Ensure currentChecklist exists
-    if (!this.currentChecklist || !this.currentChecklist.items) {
-      console.error('Checklist non inizializzata');
-      showToast('Errore: checklist non inizializzata', 'error');
-      return;
-    }
-    
-    const item = this.currentChecklist.items.find(i => i.id === itemId);
-    if (!item) {
-      console.error('Item non trovato:', itemId);
-      showToast('Errore: item non trovato', 'error');
-      return;
-    }
-
-    if (item.qtyPicked < item.qtyRequested) {
-      item.qtyPicked = item.qtyRequested;
-    }
-    item.prepared = item.qtyPicked >= item.qtyRequested;
-
-    // Clear render cache
-    renderCache.clear();
-    
-    try {
-      await this.saveChecklist();
-    } catch (error) {
-      console.error('Errore salvataggio checklist:', error);
-      showToast('Errore nel salvataggio', 'error');
-      return;
-    }
-    
-    this.throttledRender();
-  }
-  
-  async toggleExtraPrepared(extraIndex) {
-    if (extraIndex < 0 || !this.currentChecklist.extras || extraIndex >= this.currentChecklist.extras.length) {
-      console.error('Indice extra non valido:', extraIndex);
-      showToast('Errore: indice extra non valido', 'error');
-      return;
-    }
-    
-    const extra = this.currentChecklist.extras[extraIndex];
-    if (!extra) {
-      console.error('Extra non trovato:', extraIndex);
-      showToast('Errore: extra non trovato', 'error');
-      return;
-    }
-
-    if (extra.qtyPicked < extra.qtyRequested) {
-      extra.qtyPicked = extra.qtyRequested;
-    }
-    extra.prepared = extra.qtyPicked >= extra.qtyRequested;
-
-    // Clear render cache
-    renderCache.clear();
-    
-    try {
-      await this.saveChecklist();
-    } catch (error) {
-      console.error('Errore salvataggio checklist:', error);
-      showToast('Errore nel salvataggio', 'error');
-      return;
-    }
-    
-    this.throttledRender();
-  }
-  
-  async markCategoryComplete(categoryId) {
-    if (!categoryId) {
-      console.error('ID categoria mancante');
-      showToast('Errore: ID categoria mancante', 'error');
-      return;
-    }
-    
-    // Ensure currentChecklist exists
-    if (!this.currentChecklist || !this.currentChecklist.items) {
-      console.error('Checklist non inizializzata');
-      showToast('Errore: checklist non inizializzata', 'error');
-      return;
-    }
-    
-    try {
-      // Trova tutti gli items di questa categoria
-      const categoryItems = this.currentChecklist.items.filter(item => {
-        if (!item || !item.id) return false;
-        const product = this.products.find(p => p.id === item.id);
-        return product && product.categoryId === categoryId;
-      });
-      
-      if (categoryItems.length === 0) {
-        showToast('Nessun item trovato per questa categoria', 'warning');
-        return;
-      }
-      
-      // Segna tutti come completati
-      categoryItems.forEach(item => {
-        item.qtyPicked = item.qtyRequested;
-        item.prepared = true;
-      });
-      
-      // Clear render cache
-      renderCache.clear();
-      
-      await this.saveChecklist();
-      this.throttledRender();
-      showToast('Categoria completata!', 'success');
-    } catch (error) {
-      console.error('Errore nel completamento categoria:', error);
-      showToast('Errore nel completamento categoria', 'error');
-    }
-  }
-  
-  async markNotificationRead(notificationId) {
-    if (!notificationId) {
-      console.error('ID notifica mancante');
-      showToast('Errore: ID notifica mancante', 'error');
-      return;
-    }
-    
-    try {
-      const week = getWeekString(this.selectedDate);
-      const day = formatDate(this.selectedDate);
-      const notifDocId = `${week}_${day}`;
-      
-      await updateDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), {
-        read: true
-      });
-      
-      // Clear notification cache
-      notificationCache.delete(notifDocId);
-      
-      showToast('Notifica segnata come letta', 'success');
-    } catch (error) {
-      console.error('Errore nel segnare notifica come letta:', error);
-      showToast('Errore nell\'aggiornamento notifica', 'error');
-    }
-  }
-  
-  // Cleanup method
-  destroy() {
-    if (this.renderTimeout) {
-      clearTimeout(this.renderTimeout);
-    }
-    
-    // Rimuovi listener esistenti se presenti
-    if (this.listenerUnsubscribes) {
-      this.listenerUnsubscribes.forEach(unsubscribe => {
-        try {
-          unsubscribe();
-        } catch (error) {
-          console.warn('Errore rimozione listener:', error);
-        }
-      });
-    }
-    
-    // Clear all caches
-    checklistCache.clear();
-    notificationCache.clear();
-    renderCache.clear();
-  }
-  
   async markAllNotificationsRead() {
     try {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       const notifDocId = `${week}_${day}`;
       
-      const unreadNotifications = this.notifications.filter(n => !n.read);
-      
-      for (const notification of unreadNotifications) {
-        await updateDoc(doc(db, 'notifications', notifDocId, 'entries', notification.id), {
-          read: true
-        });
-      }
-      
-      // Aggiorna counter
+      // Update main notification document
       await setDoc(doc(db, 'notifications', notifDocId), {
         unreadCount: 0,
         lastUpdate: Timestamp.now()
       }, { merge: true });
       
-      // Clear notification cache
-      notificationCache.delete(notifDocId);
+      // Mark all entries as read
+      const batch = [];
+      for (const notification of this.notifications) {
+        if (!notification.read) {
+          batch.push(
+            setDoc(doc(db, 'notifications', notifDocId, 'entries', notification.id), {
+              ...notification,
+              read: true
+            })
+          );
+        }
+      }
       
+      await Promise.all(batch);
+      
+      await this.loadNotifications();
       showToast('Tutte le notifiche segnate come lette', 'success');
     } catch (error) {
-      console.error('Errore nel segnare tutte le notifiche come lette:', error);
-      showToast('Errore nell\'aggiornamento notifiche', 'error');
+      console.error('Errore aggiornamento notifiche:', error);
+      showToast('Errore durante l\'aggiornamento delle notifiche', 'error');
     }
   }
 
+  renderChecklist() {
+    const container = safeQuerySelector('#checklistContainer');
+    const emptyState = safeQuerySelector('#emptyState');
+    
+    if (!container || !emptyState) return;
+    
+    if (!this.currentList || (!this.currentList.items?.length && !this.currentList.extras?.length)) {
+      this.showEmptyState();
+      return;
+    }
+    
+    container.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+    
+    container.innerHTML = '';
+    
+    // Group products by category
+    const groupedProducts = new Map();
+    
+    if (this.currentList.items) {
+      this.currentList.items.forEach(item => {
+        const product = this.products.find(p => p.id === item.id);
+        if (product) {
+          if (!groupedProducts.has(product.categoryId)) {
+            groupedProducts.set(product.categoryId, []);
+          }
+          groupedProducts.get(product.categoryId).push({
+            ...product,
+            quantity: item.quantity,
+            checked: item.checked || false
+          });
+        }
+      });
+    }
+    
+    // Render categories
+    const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+      const categoryA = this.categories.find(c => c.id === categoryIdA);
+      const categoryB = this.categories.find(c => c.id === categoryIdB);
+      if (!categoryA || !categoryB) return 0;
+      return categoryA.name.localeCompare(categoryB.name);
+    });
+    
+    sortedCategoryEntries.forEach(([categoryId, products]) => {
+      const categorySection = this.createCategoryChecklistSection(categoryId, products);
+      if (categorySection) {
+        container.appendChild(categorySection);
+      }
+    });
+    
+    // Render extras if any
+    if (this.currentList.extras && this.currentList.extras.length > 0) {
+      const extrasSection = this.createExtrasSection();
+      if (extrasSection) {
+        container.appendChild(extrasSection);
+      }
+    }
+  }
+
+  createCategoryChecklistSection(categoryId, products) {
+    const category = this.categories.find(c => c.id === categoryId);
+    if (!category) return null;
+
+    products.sort((a, b) => a.name.localeCompare(b.name));
+    
+    const categorySection = document.createElement('div');
+    categorySection.className = 'category-section';
+    categorySection.style.background = `linear-gradient(135deg, ${category.colorHex}10 0%, transparent 100%)`;
+    categorySection.style.border = `1px solid ${category.colorHex}30`;
+    categorySection.style.borderRadius = '12px';
+    categorySection.style.borderLeft = `4px solid ${category.colorHex}`;
+    categorySection.style.marginBottom = '1rem';
+    
+    const categoryHeader = document.createElement('div');
+    categoryHeader.className = 'category-header';
+    categoryHeader.style.cssText = `
+      color: ${category.colorHex};
+      padding: 0.75rem 1rem;
+      background: ${category.colorHex}08;
+      border-bottom: 1px solid ${category.colorHex}20;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+    
+    const checkedCount = products.filter(p => p.checked).length;
+    const totalCount = products.length;
+    
+    categoryHeader.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span>📂</span>
+        <span>${category.name}</span>
+      </div>
+      <span style="font-size: 0.8rem; opacity: 0.8;">${checkedCount}/${totalCount}</span>
+    `;
+    
+    categorySection.appendChild(categoryHeader);
+
+    const categoryContent = document.createElement('div');
+    categoryContent.style.padding = '0.5rem';
+    
+    const productsGrid = document.createElement('div');
+    productsGrid.style.display = 'grid';
+    productsGrid.style.gap = '0.5rem';
+
+    products.forEach(product => {
+      const productCard = this.createProductChecklistCard(product, category);
+      productsGrid.appendChild(productCard);
+    });
+
+    categoryContent.appendChild(productsGrid);
+    categorySection.appendChild(categoryContent);
+    return categorySection;
+  }
+
+  createProductChecklistCard(product, category) {
+    const card = document.createElement('div');
+    card.className = `product-card ${product.checked ? 'checked' : ''}`;
+    card.style.cssText = `
+      background: var(--bg-card);
+      border: 2px solid ${product.checked ? category.colorHex : 'var(--border-color)'};
+      border-radius: 8px;
+      padding: 1rem;
+      transition: all 0.3s ease;
+      ${product.checked ? `background: ${category.colorHex}10;` : ''}
+    `;
+    
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+        <div style="flex: 1;">
+          <div style="font-weight: 600; margin-bottom: 0.25rem; ${product.checked ? 'text-decoration: line-through; opacity: 0.7;' : ''}">
+            ${product.name}
+            ${product.important ? '<span class="important-badge">Importante</span>' : ''}
+          </div>
+          <div style="font-size: 0.875rem; color: var(--text-secondary);">
+            Quantità: ${product.quantity}
+          </div>
+        </div>
+        <label style="display: flex; align-items: center; cursor: pointer;">
+          <input type="checkbox" ${product.checked ? 'checked' : ''} 
+                 data-product-id="${product.id}"
+                 style="width: 20px; height: 20px; margin-right: 0.5rem;">
+          <span style="font-size: 0.875rem; font-weight: 600;">
+            ${product.checked ? '✅ Preparato' : '⏳ Da preparare'}
+          </span>
+        </label>
+      </div>
+    `;
+
+    // Add event listener for checkbox
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      checkbox.addEventListener('change', (e) => {
+        this.toggleProductCheck(product.id, e.target.checked);
+      });
+    }
+
+    return card;
+  }
+
+  createExtrasSection() {
+    const extrasSection = document.createElement('div');
+    extrasSection.className = 'category-section';
+    extrasSection.style.cssText = `
+      background: linear-gradient(135deg, #f59e0b10 0%, transparent 100%);
+      border: 1px solid #f59e0b30;
+      border-radius: 12px;
+      border-left: 4px solid #f59e0b;
+      margin-bottom: 1rem;
+    `;
+    
+    const extrasHeader = document.createElement('div');
+    extrasHeader.className = 'category-header';
+    extrasHeader.style.cssText = `
+      color: #f59e0b;
+      padding: 0.75rem 1rem;
+      background: #f59e0b08;
+      border-bottom: 1px solid #f59e0b20;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+    
+    const checkedExtras = this.currentList.extras.filter(e => e.checked).length;
+    const totalExtras = this.currentList.extras.length;
+    
+    extrasHeader.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span>➕</span>
+        <span>Prodotti Extra</span>
+      </div>
+      <span style="font-size: 0.8rem; opacity: 0.8;">${checkedExtras}/${totalExtras}</span>
+    `;
+    
+    extrasSection.appendChild(extrasHeader);
+
+    const extrasContent = document.createElement('div');
+    extrasContent.style.padding = '0.5rem';
+    
+    const extrasGrid = document.createElement('div');
+    extrasGrid.style.display = 'grid';
+    extrasGrid.style.gap = '0.5rem';
+
+    this.currentList.extras.forEach((extra, index) => {
+      const extraCard = this.createExtraChecklistCard(extra, index);
+      extrasGrid.appendChild(extraCard);
+    });
+
+    extrasContent.appendChild(extrasGrid);
+    extrasSection.appendChild(extrasContent);
+    return extrasSection;
+  }
+
+  createExtraChecklistCard(extra, index) {
+    const card = document.createElement('div');
+    card.className = `product-card ${extra.checked ? 'checked' : ''}`;
+    card.style.cssText = `
+      background: var(--bg-card);
+      border: 2px solid ${extra.checked ? '#f59e0b' : 'var(--border-color)'};
+      border-radius: 8px;
+      padding: 1rem;
+      transition: all 0.3s ease;
+      ${extra.checked ? 'background: #f59e0b10;' : ''}
+    `;
+    
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+        <div style="flex: 1;">
+          <div style="font-weight: 600; margin-bottom: 0.25rem; ${extra.checked ? 'text-decoration: line-through; opacity: 0.7;' : ''}">
+            ${extra.name}
+          </div>
+          <div style="font-size: 0.875rem; color: var(--text-secondary);">
+            Quantità: ${extra.quantity}
+          </div>
+        </div>
+        <label style="display: flex; align-items: center; cursor: pointer;">
+          <input type="checkbox" ${extra.checked ? 'checked' : ''} 
+                 data-extra-index="${index}"
+                 style="width: 20px; height: 20px; margin-right: 0.5rem;">
+          <span style="font-size: 0.875rem; font-weight: 600;">
+            ${extra.checked ? '✅ Preparato' : '⏳ Da preparare'}
+          </span>
+        </label>
+      </div>
+    `;
+
+    // Add event listener for checkbox
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      checkbox.addEventListener('change', (e) => {
+        this.toggleExtraCheck(index, e.target.checked);
+      });
+    }
+
+    return card;
+  }
+
+  async toggleProductCheck(productId, checked) {
+    if (!this.currentList || !this.currentList.items) return;
+    
+    const itemIndex = this.currentList.items.findIndex(item => item.id === productId);
+    if (itemIndex === -1) return;
+    
+    this.currentList.items[itemIndex].checked = checked;
+    
+    await this.saveChecklist();
+    this.renderChecklist();
+  }
+
+  async toggleExtraCheck(extraIndex, checked) {
+    if (!this.currentList || !this.currentList.extras) return;
+    
+    if (extraIndex < 0 || extraIndex >= this.currentList.extras.length) return;
+    
+    this.currentList.extras[extraIndex].checked = checked;
+    
+    await this.saveChecklist();
+    this.renderChecklist();
+  }
+
+  async saveChecklist() {
+    try {
+      const week = getWeekString(this.selectedDate);
+      const day = formatDate(this.selectedDate);
+      
+      await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
+      
+      showToast('Checklist aggiornata', 'success');
+    } catch (error) {
+      console.error('Errore salvataggio checklist:', error);
+      showToast('Errore durante il salvataggio', 'error');
+    }
+  }
+
+  showEmptyState() {
+    const container = safeQuerySelector('#checklistContainer');
+    const emptyState = safeQuerySelector('#emptyState');
+    
+    if (container) container.classList.add('hidden');
+    if (emptyState) emptyState.classList.remove('hidden');
+  }
+
+  showError(message) {
+    const errorEl = safeQuerySelector('#errorMessage');
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.classList.remove('hidden');
+      setTimeout(() => errorEl.classList.add('hidden'), 5000);
+    }
+    showToast(message, 'error');
+  }
 }
 
-// Handle page unload
-window.addEventListener('beforeunload', () => {
-  if (window.magazzinoManager) {
-    window.magazzinoManager.destroy();
-  }
-});
-
-// Handle orientation changes
-window.addEventListener('orientationchange', () => {
-  setTimeout(() => {
-    if (window.magazzinoManager) {
-      window.magazzinoManager.throttledRender();
-    }
-  }, 100);
-});
-
-// Inizializza l'applicazione
 window.magazzinoManager = new MagazzinoManager();

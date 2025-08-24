@@ -798,7 +798,6 @@ body {
   align-items: center;
   margin-bottom: 0;
   padding: var(--spacing-md);
-  border-bottom: 2px solid var(--border-color);
   gap: var(--spacing-sm);
   flex-wrap: wrap;
   cursor: pointer;
@@ -828,6 +827,11 @@ body {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.8rem;
   color: var(--text-secondary);
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .category-toggle-icon.collapsed {
