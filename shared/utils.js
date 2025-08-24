@@ -624,48 +624,24 @@ export function safeAddEventListener(element, event, handler, options = {}) {
     return () => {};
   }
   
-  // Controlla se esiste già un listener identico
-  const listenerKey = `${event}-${handler.toString()}`;
-  if (eventListenerPool.has(element)) {
-    const elementListeners = eventListenerPool.get(element);
-    if (elementListeners.has(listenerKey)) {
-      return elementListeners.get(listenerKey);
-    }
-  }
-  
   try {
+    // Add passive option for touch events to improve performance
+    const finalOptions = { ...options };
+    if (event.startsWith('touch') && !('passive' in options)) {
+      finalOptions.passive = true;
+    }
+    
     element.addEventListener(event, handler, options);
     
     const removeListener = () => {
       try {
         element.removeEventListener(event, handler, options);
-        
-        // Rimuovi dalla cache
-        if (eventListenerPool.has(element)) {
-          const elementListeners = eventListenerPool.get(element);
-          elementListeners.delete(listenerKey);
-          if (elementListeners.size === 0) {
-            eventListenerPool.delete(element);
-          }
-        }
       } catch (error) {
         console.warn('Errore rimozione event listener:', error);
       }
     };
     
-    // Salva nella cache
-    if (!eventListenerPool.has(element)) {
-      eventListenerPool.set(element, new Map());
-    }
-    eventListenerPool.get(element).set(listenerKey, removeListener);
-    
-    return () => {
-      try {
-        element.removeEventListener(event, handler, options);
-      } catch (error) {
-        console.warn('Errore rimozione event listener:', error);
-      }
-    };
+    return removeListener;
   } catch (error) {
     console.error('Errore aggiunta event listener:', error);
     return () => {};
@@ -1018,7 +994,7 @@ export function initMobileUtils() {
   handleMobileKeyboard();
   
   // Handle input focus
-  handleInputFocus();
+  setTimeout(handleInputFocus, 1000); // Delay to ensure DOM is ready
   
   // Prevent bounce scroll on iOS
   if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
@@ -1032,6 +1008,10 @@ export function initMobileUtils() {
   document.documentElement.classList.add(isMobile() ? 'is-mobile' : 'is-desktop');
   if (isSmallMobile()) document.documentElement.classList.add('is-small-mobile');
   if (isExtraSmallMobile()) document.documentElement.classList.add('is-extra-small-mobile');
+  
+  // Optimize touch events
+  document.addEventListener('touchstart', function() {}, { passive: true });
+  document.addEventListener('touchmove', function() {}, { passive: true });
 }
 
 // Cache per computed styles
@@ -1239,7 +1219,7 @@ export function initHamburgerMenu() {
     expandBtn.addEventListener('click', () => {
       if (window.listaManager) {
         window.listaManager.expandAllCategories();
-      } else if (window.catalogoManager) {
+      } else if (window.catalogoManager && typeof window.catalogoManager.expandAllCategories === 'function') {
         window.catalogoManager.expandAllCategories();
       }
       hideDropdown();
@@ -1253,7 +1233,7 @@ export function initHamburgerMenu() {
     collapseBtn.addEventListener('click', () => {
       if (window.listaManager) {
         window.listaManager.collapseAllCategories();
-      } else if (window.catalogoManager) {
+      } else if (window.catalogoManager && typeof window.catalogoManager.collapseAllCategories === 'function') {
         window.catalogoManager.collapseAllCategories();
       }
       hideDropdown();

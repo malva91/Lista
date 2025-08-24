@@ -204,6 +204,14 @@ class ListaManager {
         this.collapseAllCategories();
       });
     }
+
+    // Delete list button (test)
+    const deleteListBtn = safeQuerySelector('#deleteListBtn');
+    if (deleteListBtn) {
+      safeAddEventListener(deleteListBtn, 'click', () => {
+        this.deleteCurrentList();
+      });
+    }
   }
 
   async loadCategories(updateCache = false) {
@@ -511,7 +519,6 @@ class ListaManager {
     
     const categoryHeader = document.createElement('div');
     categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
-    categoryHeader.style.color = category.colorHex;
     categoryHeader.style.cssText = `
       color: ${category.colorHex};
       cursor: pointer;
@@ -519,6 +526,8 @@ class ListaManager {
       padding: 0.75rem 1rem;
       background: ${category.colorHex}08;
       border-bottom: ${isCollapsed ? 'none' : `1px solid ${category.colorHex}20`};
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     `;
     categoryHeader.innerHTML = `
       <div class="category-title">
@@ -530,9 +539,20 @@ class ListaManager {
     `;
     
     // Add click handler for toggle
-    categoryHeader.addEventListener('click', () => {
+    categoryHeader.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       this.toggleCategory(categoryId);
-    });
+    }, { passive: false });
+    
+    // Add touch handlers for better mobile experience
+    categoryHeader.addEventListener('touchstart', (e) => {
+      categoryHeader.style.opacity = '0.7';
+    }, { passive: true });
+    
+    categoryHeader.addEventListener('touchend', (e) => {
+      categoryHeader.style.opacity = '';
+    }, { passive: true });
     
     categorySection.appendChild(categoryHeader);
 
@@ -541,12 +561,11 @@ class ListaManager {
     categoryContent.style.cssText = `
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       overflow: hidden;
-      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: none; opacity: 1;'}
+      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0; margin: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
     `;
     
     const productsGrid = document.createElement('div');
     productsGrid.className = 'products-grid';
-    productsGrid.style.padding = '0.5rem';
 
     products.forEach(product => {
       const productCard = this.createProductCard(product, category);
@@ -559,6 +578,8 @@ class ListaManager {
   }
   
   toggleCategory(categoryId) {
+    console.log('Toggling category:', categoryId);
+    
     if (this.collapsedCategories.has(categoryId)) {
       this.collapsedCategories.delete(categoryId);
     } else {
@@ -566,27 +587,92 @@ class ListaManager {
     }
     
     // Save state to localStorage
-    localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    try {
+      localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    } catch (error) {
+      console.warn('Errore salvataggio stato categorie:', error);
+    }
     
-    // Clear render cache to force re-render
+    // Update UI immediately without full re-render for better performance
+    this.updateCategoryToggleUI(categoryId);
+  }
+  
+  updateCategoryToggleUI(categoryId) {
+    const isCollapsed = this.collapsedCategories.has(categoryId);
+    
+    // Find the category section in DOM
+    const categoryHeaders = document.querySelectorAll('.category-header');
+    categoryHeaders.forEach(header => {
+      const titleElement = header.querySelector('.category-title span:last-child');
+      if (titleElement && titleElement.textContent.includes(this.categories.find(c => c.id === categoryId)?.name)) {
+        const toggleIcon = header.querySelector('.category-toggle-icon');
+        const categoryContent = header.parentElement.querySelector('.category-content');
+        
+        if (toggleIcon && categoryContent) {
+          // Update icon
+          toggleIcon.classList.toggle('collapsed', isCollapsed);
+          toggleIcon.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+          
+          // Update content visibility
+          categoryContent.classList.toggle('collapsed', isCollapsed);
+          if (isCollapsed) {
+            categoryContent.style.maxHeight = '0';
+            categoryContent.style.opacity = '0';
+            categoryContent.style.padding = '0';
+            categoryContent.style.margin = '0';
+            header.style.borderBottom = 'none';
+          } else {
+            categoryContent.style.maxHeight = '2000px';
+            categoryContent.style.opacity = '1';
+            categoryContent.style.padding = '0.5rem';
+            categoryContent.style.margin = '';
+            const category = this.categories.find(c => c.id === categoryId);
+            if (category) {
+              header.style.borderBottom = `1px solid ${category.colorHex}20`;
+            }
+          }
+        }
+      }
+    });
+    
+    // Clear render cache for next full render
     productRenderCache.clear();
-    
-    this.throttledRender();
   }
 
   expandAllCategories() {
+    console.log('Expanding all categories');
     this.collapsedCategories.clear();
-    localStorage.setItem('collapsedCategories', JSON.stringify([]));
-    this.throttledRender();
+    try {
+      localStorage.setItem('collapsedCategories', JSON.stringify([]));
+    } catch (error) {
+      console.warn('Errore salvataggio stato categorie:', error);
+    }
+    
+    // Update all categories immediately
+    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
+    categoryIds.forEach(categoryId => {
+      this.updateCategoryToggleUI(categoryId);
+    });
+    
     showToast('Tutte le categorie espanse', 'success');
   }
 
   collapseAllCategories() {
+    console.log('Collapsing all categories');
     // Add all category IDs to collapsed set
     const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
-    localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
-    this.throttledRender();
+    try {
+      localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    } catch (error) {
+      console.warn('Errore salvataggio stato categorie:', error);
+    }
+    
+    // Update all categories immediately
+    categoryIds.forEach(categoryId => {
+      this.updateCategoryToggleUI(categoryId);
+    });
+    
     showToast('Tutte le categorie chiuse', 'success');
   }
 
@@ -596,9 +682,8 @@ class ListaManager {
       if (saved) {
         this.collapsedCategories = new Set(JSON.parse(saved));
       } else {
-        // Default: all categories collapsed
-        const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
-        this.collapsedCategories = new Set(categoryIds);
+        // Default: all categories expanded for better UX
+        this.collapsedCategories = new Set();
       }
     } catch (error) {
       console.warn('Errore caricamento stato categorie:', error);
@@ -610,11 +695,12 @@ class ListaManager {
   attachEventListeners(container) {
     const qtyInputs = container.querySelectorAll('.qty-input');
     const qtyBtns = container.querySelectorAll('.qty-btn');
+    const categoryHeaders = container.querySelectorAll('.category-header');
     
     qtyInputs.forEach(input => {
       const productId = input.dataset.productId;
       if (productId) {
-        input.addEventListener('change', (e) => {
+        safeAddEventListener(input, 'change', (e) => {
           this.updateQuantity(productId, parseInt(e.target.value) || 0);
         });
       }
@@ -624,11 +710,38 @@ class ListaManager {
       const productId = btn.dataset.productId;
       const action = btn.dataset.action;
       if (productId && action) {
-        btn.addEventListener('click', () => {
+        safeAddEventListener(btn, 'click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           const currentQty = this.getCurrentQuantity(productId);
           const newQty = action === 'increase' ? currentQty + 1 : Math.max(0, currentQty - 1);
           this.updateQuantity(productId, newQty);
         });
+      }
+    });
+    
+    // Re-attach category toggle listeners
+    categoryHeaders.forEach(header => {
+      const titleElement = header.querySelector('.category-title span:last-child');
+      if (titleElement) {
+        const categoryName = titleElement.textContent;
+        const category = this.categories.find(c => c.name === categoryName);
+        if (category) {
+          safeAddEventListener(header, 'click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.toggleCategory(category.id);
+          });
+          
+          // Add touch feedback
+          safeAddEventListener(header, 'touchstart', () => {
+            header.style.opacity = '0.7';
+          });
+          
+          safeAddEventListener(header, 'touchend', () => {
+            header.style.opacity = '';
+          });
+        }
       }
     });
   }
@@ -1168,6 +1281,41 @@ class ListaManager {
     // Clear caches
     listCache.clear();
     productRenderCache.clear();
+  }
+  
+  // Add delete list functionality for testing
+  async deleteCurrentList() {
+    if (!confirm('Sei sicuro di voler eliminare la lista corrente? Questa azione non può essere annullata.')) {
+      return;
+    }
+    
+    try {
+      const week = getWeekString(this.selectedDate);
+      const day = formatDate(this.selectedDate);
+      
+      // Delete from Firestore
+      const { deleteDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+      await deleteDoc(doc(db, 'weeks', week, 'lists', day));
+      
+      // Clear local storage
+      localStorage.removeItem(`list-${week}-${day}`);
+      
+      // Clear cache
+      const cacheKey = `${week}-${day}`;
+      listCache.delete(cacheKey);
+      
+      // Reset current list
+      this.currentList = { items: [], extras: [], status: {}, version: 0 };
+      
+      // Re-render
+      this.throttledRender();
+      this.renderExtras();
+      
+      showToast('Lista eliminata con successo', 'success');
+    } catch (error) {
+      console.error('Errore eliminazione lista:', error);
+      showToast('Errore durante l\'eliminazione della lista', 'error');
+    }
   }
 }
 
