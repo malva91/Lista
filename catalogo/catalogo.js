@@ -338,15 +338,13 @@ class CatalogoManager {
         btn.classList.toggle('active', !this.selectedCategory);
       } else {
         const category = sortedCategories[index - 1];
+        if (!category) return;
         const isActive = this.selectedCategory === category.id;
         btn.classList.toggle('active', isActive);
         btn.style.backgroundColor = isActive ? category.colorHex : '';
         btn.style.color = isActive ? getContrastColor(category.colorHex) : '';
       }
     });
-    
-    // Re-filter and render when category changes
-    this.filterAndRenderProducts();
   }
 
   resetPagination() {
@@ -367,7 +365,20 @@ class CatalogoManager {
 
     // Reset and render first batch
     this.resetPagination();
-    this.renderProducts();
+    
+    const container = safeQuerySelector('#productsList');
+    const loading = safeQuerySelector('#loadingProducts');
+    
+    if (!container) return;
+    
+    loading.classList.add('hidden');
+    container.classList.remove('hidden');
+    
+    // Clear container for fresh render
+    container.innerHTML = '';
+    
+    // Load first batch
+    this.loadMoreProducts();
   }
 
   async loadMoreProducts() {
@@ -421,7 +432,6 @@ class CatalogoManager {
       this.loadingIndicator = null;
     }
   }
-
   renderProductCategorySelect() {
     const select = safeQuerySelector('#productCategory');
     if (!select) return;
@@ -448,6 +458,9 @@ class CatalogoManager {
     
     // Clear container for fresh render
     container.innerHTML = '';
+    
+    // Reset pagination state
+    this.resetPagination();
     
     // Load first batch
     this.loadMoreProducts();
@@ -637,7 +650,7 @@ class CatalogoManager {
   }
 
   collapseAllCategories() {
-    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
+    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
     this.saveCollapsedState();
     this.updateCategoryVisibility();

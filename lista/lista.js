@@ -277,7 +277,20 @@ class ListaManager {
 
     // Reset and render first batch
     this.resetPagination();
-    this.renderProductsOptimized();
+    
+    const container = document.getElementById('productsList');
+    const loading = document.getElementById('loadingProducts');
+    
+    if (!container) return;
+    
+    loading.classList.add('hidden');
+    container.classList.remove('hidden');
+    
+    // Clear container for fresh render
+    container.innerHTML = '';
+    
+    // Load first batch
+    this.loadMoreProducts();
   }
   
   async loadMoreProducts() {
@@ -399,6 +412,7 @@ class ListaManager {
         btn.classList.toggle('active', !this.selectedCategory);
       } else {
         const category = sortedCategories[index - 1];
+        if (!category) return;
         const isActive = this.selectedCategory === category.id;
         btn.classList.toggle('active', isActive);
         btn.style.backgroundColor = isActive ? category.colorHex : '';
@@ -421,6 +435,7 @@ class ListaManager {
     
     // Filter products if not already done
     if (this.filteredProducts.length === 0) {
+      this.resetPagination();
       this.filterAndRenderProducts();
       return;
     }
@@ -597,7 +612,7 @@ class ListaManager {
   }
 
   collapseAllCategories() {
-    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
+    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
     this.saveCollapsedState();
     this.updateCategoryVisibility();
