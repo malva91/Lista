@@ -180,12 +180,12 @@ class CatalogoManager {
     // Optimized infinite scroll
     const container = safeQuerySelector('#productsList');
     if (container) {
-      const scrollHandler = (e) => {
-        const { scrollTop, scrollHeight, clientHeight } = e.target;
+      const scrollHandler = debounce((e) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.target.scrollingElement || e.target;
         const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
         
-        // Load more when 80% scrolled
-        if (scrollPercentage > 0.8 && this.hasMoreProducts && !this.isLoading) {
+        // Load more when 70% scrolled
+        if (scrollPercentage > 0.7 && this.hasMoreProducts && !this.isLoading) {
           console.log('Loading more products...', {
             currentBatch: this.currentBatch,
             hasMore: this.hasMoreProducts,
@@ -193,7 +193,7 @@ class CatalogoManager {
           });
           this.loadMoreProducts();
         }
-      };
+      }, 100);
       
       safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
@@ -1111,7 +1111,7 @@ class CatalogoManager {
         if (category.name && category.colorHex) {
           const categoryId = await generateUniqueId('categories', category.name, db);
           await setDoc(doc(db, 'categories', categoryId), {
-    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
+            name: category.name,
             colorHex: category.colorHex,
             createdAt: new Date()
           });
