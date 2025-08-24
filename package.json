@@ -1,0 +1,26 @@
+{
+  "name": "gestione-liste-prodotti",
+  "version": "1.2.0",
+  "description": "Sistema di gestione liste prodotti per dipendenti e magazzino",
+  "type": "module",
+  "scripts": {
+    "dev": "python -m http.server 8000",
+    "start": "python -m http.server 8000",
+    "build": "echo 'No build step required for static files'",
+    "version": "node scripts/update-version.js"
+  },
+  "keywords": [
+    "inventory",
+    "products",
+    "management",
+    "mobile",
+    "pwa"
+  ],
+  "author": "Sistema Gestione Prodotti",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

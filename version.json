@@ -1,0 +1,22 @@
+{
+  "version": "1.2.0",
+  "timestamp": "2025-01-27T10:30:00.000Z",
+  "description": "Versione con correzioni performance mobile e menu funzionanti",
+  "changes": [
+    "Risolti problemi menu a scomparsa",
+    "Corretti pulsanti apri/chiudi tutto",
+    "Ottimizzate performance su smartphone",
+    "Aggiunto sistema di versioning",
+    "Migliorata gestione cache browser"
+  ],
+  "files": [
+    "index.html",
+    "lista/index.html",
+    "lista/lista.js",
+    "magazzino/index.html",
+    "catalogo/index.html",
+    "shared/styles.css",
+    "shared/utils.js",
+    "shared/firebase.js"
+  ]
+}
