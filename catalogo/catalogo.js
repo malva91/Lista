@@ -655,10 +655,18 @@ class CatalogoManager {
       border: 1px solid ${category.colorHex}20;
       border-radius: 12px;
       margin-bottom: 2rem;
+      overflow: hidden;
     `;
     
     const categoryHeader = document.createElement('div');
     categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
+    categoryHeader.style.cssText = `
+      cursor: pointer;
+      user-select: none;
+      padding: 1rem;
+      background: ${category.colorHex}08;
+      border-bottom: ${isCollapsed ? 'none' : `1px solid ${category.colorHex}20`};
+    `;
     categoryHeader.innerHTML = `
       <div class="category-title">
         <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
@@ -677,6 +685,11 @@ class CatalogoManager {
     
     const categoryContent = document.createElement('div');
     categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
+    categoryContent.style.cssText = `
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: none; opacity: 1;'}
+    `;
     
     const productsGrid = document.createElement('div');
     productsGrid.className = 'products-grid';
@@ -702,6 +715,9 @@ class CatalogoManager {
     
     // Save state to localStorage
     localStorage.setItem('catalogoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    
+    // Clear render cache to force re-render
+    renderCache.clear();
     
     this.throttledRender();
   }

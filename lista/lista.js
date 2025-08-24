@@ -504,10 +504,19 @@ class ListaManager {
     categorySection.style.border = `1px solid ${category.colorHex}30`;
     categorySection.style.borderRadius = '12px';
     categorySection.style.borderLeft = `4px solid ${category.colorHex}`;
+    categorySection.style.overflow = 'hidden';
     
     const categoryHeader = document.createElement('div');
     categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
     categoryHeader.style.color = category.colorHex;
+    categoryHeader.style.cssText = `
+      color: ${category.colorHex};
+      cursor: pointer;
+      user-select: none;
+      padding: 0.75rem 1rem;
+      background: ${category.colorHex}08;
+      border-bottom: ${isCollapsed ? 'none' : `1px solid ${category.colorHex}20`};
+    `;
     categoryHeader.innerHTML = `
       <div class="category-title">
         <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
@@ -526,6 +535,11 @@ class ListaManager {
 
     const categoryContent = document.createElement('div');
     categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
+    categoryContent.style.cssText = `
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: none; opacity: 1;'}
+    `;
     
     const productsGrid = document.createElement('div');
     productsGrid.className = 'products-grid';
@@ -550,6 +564,9 @@ class ListaManager {
     
     // Save state to localStorage
     localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    
+    // Clear render cache to force re-render
+    productRenderCache.clear();
     
     this.throttledRender();
   }

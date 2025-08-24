@@ -716,7 +716,7 @@ body {
   display: grid;
   gap: var(--spacing-sm);
   grid-template-columns: 1fr;
-  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
 }
 
 @media (min-width: 640px) {
