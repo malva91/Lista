@@ -7,7 +7,7 @@ const productCache = new Map();
 const categoryCache = new Map();
 
 // Virtual scrolling e lazy loading
-const ITEMS_PER_BATCH = 20;
+export const ITEMS_PER_BATCH = 20;
 const SCROLL_THRESHOLD = 200;
 
 // Intersection Observer per lazy loading
