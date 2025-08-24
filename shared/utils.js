@@ -1157,3 +1157,178 @@ export function setTheme(theme) {
     toggle.innerHTML = theme === 'dark' ? '☀️' : '🌙';
   }
 }
+
+// Hamburger Menu Management
+export function initHamburgerMenu() {
+  // Remove existing menu if present
+  const existingMenu = document.querySelector('.hamburger-menu');
+  const existingDropdown = document.querySelector('.dropdown-menu');
+  if (existingMenu) existingMenu.remove();
+  if (existingDropdown) existingDropdown.remove();
+  
+  // Create hamburger button
+  const hamburger = document.createElement('button');
+  hamburger.className = 'hamburger-menu';
+  hamburger.setAttribute('aria-label', 'Menu');
+  hamburger.setAttribute('aria-expanded', 'false');
+  hamburger.innerHTML = `
+    <div class="hamburger-line"></div>
+    <div class="hamburger-line"></div>
+    <div class="hamburger-line"></div>
+  `;
+  
+  // Create dropdown menu
+  const dropdown = document.createElement('div');
+  dropdown.className = 'dropdown-menu';
+  dropdown.setAttribute('role', 'menu');
+  
+  // Get current page
+  const currentPath = window.location.pathname;
+  const isHome = currentPath === '/' || currentPath.endsWith('/index.html');
+  const isLista = currentPath.includes('/lista/');
+  const isMagazzino = currentPath.includes('/magazzino/');
+  const isCatalogo = currentPath.includes('/catalogo/');
+  
+  // Build menu items
+  const menuItems = [];
+  
+  if (!isHome) {
+    menuItems.push({ text: '🏠 Home', href: '../' });
+  }
+  
+  if (!isLista) {
+    menuItems.push({ text: '📝 Lista Dipendenti', href: isHome ? 'lista/' : '../lista/' });
+  }
+  
+  if (!isMagazzino) {
+    menuItems.push({ text: '📦 Magazzino', href: isHome ? 'magazzino/' : '../magazzino/' });
+  }
+  
+  if (!isCatalogo) {
+    menuItems.push({ text: '📋 Gestione Catalogo', href: isHome ? 'catalogo/' : '../catalogo/' });
+  }
+  
+  // Add menu items to dropdown
+  menuItems.forEach((item, index) => {
+    const link = document.createElement('a');
+    link.className = 'dropdown-item';
+    link.href = item.href;
+    link.textContent = item.text;
+    link.setAttribute('role', 'menuitem');
+    dropdown.appendChild(link);
+    
+    if (index < menuItems.length - 1) {
+      const divider = document.createElement('div');
+      divider.className = 'dropdown-divider';
+      dropdown.appendChild(divider);
+    }
+  });
+  
+  // Add special actions for specific pages
+  if (isLista || isCatalogo) {
+    if (menuItems.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'dropdown-divider';
+      dropdown.appendChild(divider);
+    }
+    
+    const expandBtn = document.createElement('button');
+    expandBtn.className = 'dropdown-item';
+    expandBtn.textContent = '📂 Apri Tutte le Categorie';
+    expandBtn.setAttribute('role', 'menuitem');
+    expandBtn.addEventListener('click', () => {
+      if (window.listaManager) {
+        window.listaManager.expandAllCategories();
+      } else if (window.catalogoManager) {
+        window.catalogoManager.expandAllCategories();
+      }
+      hideDropdown();
+    });
+    dropdown.appendChild(expandBtn);
+    
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'dropdown-item';
+    collapseBtn.textContent = '📁 Chiudi Tutte le Categorie';
+    collapseBtn.setAttribute('role', 'menuitem');
+    collapseBtn.addEventListener('click', () => {
+      if (window.listaManager) {
+        window.listaManager.collapseAllCategories();
+      } else if (window.catalogoManager) {
+        window.catalogoManager.collapseAllCategories();
+      }
+      hideDropdown();
+    });
+    dropdown.appendChild(collapseBtn);
+  }
+  
+  // Add to DOM
+  document.body.appendChild(hamburger);
+  document.body.appendChild(dropdown);
+  
+  // Event handlers
+  function showDropdown() {
+    dropdown.classList.add('show');
+    hamburger.classList.add('open');
+    hamburger.setAttribute('aria-expanded', 'true');
+  }
+  
+  function hideDropdown() {
+    dropdown.classList.remove('show');
+    hamburger.classList.remove('open');
+    hamburger.setAttribute('aria-expanded', 'false');
+  }
+  
+  function toggleDropdown() {
+    if (dropdown.classList.contains('show')) {
+      hideDropdown();
+    } else {
+      showDropdown();
+    }
+  }
+  
+  // Hamburger click
+  hamburger.addEventListener('click', toggleDropdown);
+  
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!hamburger.contains(e.target) && !dropdown.contains(e.target)) {
+      hideDropdown();
+    }
+  });
+  
+  // Close on escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dropdown.classList.contains('show')) {
+      hideDropdown();
+      hamburger.focus();
+    }
+  });
+  
+  // Handle keyboard navigation
+  dropdown.addEventListener('keydown', (e) => {
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    const currentIndex = Array.from(items).indexOf(document.activeElement);
+    
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+        items[nextIndex].focus();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+        items[prevIndex].focus();
+        break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (document.activeElement.click) {
+          document.activeElement.click();
+        }
+        break;
+    }
+  });
+  
+  return { hamburger, dropdown, showDropdown, hideDropdown };
+}

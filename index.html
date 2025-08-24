@@ -132,6 +132,13 @@
     <script type="module">
         import { initTheme } from './shared/utils.js';
         initTheme();
+        
+        // Initialize hamburger menu for homepage
+        document.addEventListener('DOMContentLoaded', function() {
+            import('./shared/utils.js').then(({ initHamburgerMenu }) => {
+                initHamburgerMenu();
+            });
+        });
     </script>
 </body>
 </html>

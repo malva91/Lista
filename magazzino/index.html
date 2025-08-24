@@ -48,5 +48,11 @@
     </div>
 
     <script type="module" src="magazzino.js"></script>
+    <script type="module">
+        import { initHamburgerMenu } from '../shared/utils.js';
+        document.addEventListener('DOMContentLoaded', function() {
+            initHamburgerMenu();
+        });
+    </script>
 </body>
 </html>

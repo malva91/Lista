@@ -4,7 +4,7 @@ import {
   query, where, orderBy 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { showToast, debounce, getContrastColor, generateUniqueId } from '../shared/utils.js';
-import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme } from '../shared/utils.js';
+import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme, initHamburgerMenu } from '../shared/utils.js';
 
 // Cache per migliorare le performance
 const renderCache = new Map();
@@ -38,6 +38,9 @@ class CatalogoManager {
     
     // Initialize theme
     initTheme();
+    
+    // Initialize hamburger menu
+    initHamburgerMenu();
     
     // Preload critical data
     preloadCriticalData();
