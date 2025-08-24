@@ -682,7 +682,6 @@ class CatalogoManager {
       }
     });
   }
-      smartPrefetcher.trackInteraction('product_delete', { productId: product.id });
 
   loadCollapsedState() {
     try {
