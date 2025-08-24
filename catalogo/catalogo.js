@@ -605,9 +605,15 @@ class CatalogoManager {
     const editBtn = card.querySelector('.btn-edit');
     const deleteBtn = card.querySelector('.btn-delete');
     
-    editBtn.addEventListener('click', () => this.editProduct(product.id));
+    editBtn.addEventListener('click', () => {
       smartPrefetcher.trackInteraction('product_edit', { productId: product.id });
-    deleteBtn.addEventListener('click', () => this.deleteProduct(product.id));
+      this.editProduct(product.id);
+    });
+    
+    deleteBtn.addEventListener('click', () => {
+      smartPrefetcher.trackInteraction('product_delete', { productId: product.id });
+      this.deleteProduct(product.id);
+    });
 
     return card;
   }
@@ -631,7 +637,7 @@ class CatalogoManager {
   }
 
   collapseAllCategories() {
-    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
+    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
     this.saveCollapsedState();
     this.updateCategoryVisibility();

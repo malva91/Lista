@@ -1,16 +1,16 @@
-import { db } from '../shared/firebase.js?6v=1.3.0';
+import { db } from '../shared/firebase.js?v=1.2.0';
 import { 
   collection, doc, getDocs, getDoc, setDoc, onSnapshot, deleteDoc,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?6v=1.3.0';
+import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.2.0';
 import { 
   safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, 
   getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, 
   preloadCriticalData, initTheme, initHamburgerMenu, getAdaptiveBatchSize,
   scheduleRender, globalBatchProcessor, smartPrefetcher, VirtualScrollManager,
   initEnhancedIntersectionObserver, createScrollHandler
-} from '../shared/utils.js?6v=1.3.0';
+} from '../shared/utils.js?v=1.2.0';
 
 class ListaManager {
   constructor() {
@@ -665,10 +665,7 @@ class ListaManager {
         const action = btn.dataset.action;
         const currentQty = this.getCurrentQuantity(product.id);
         const newQty = action === 'increase' ? currentQty + 1 : Math.max(0, currentQty - 1);
-        this.updateQuantity(product.id, newQty);
-      });
-    });
-
+        
         // Track quantity changes
         smartPrefetcher.trackInteraction('quantity_change', {
           productId: product.id,
@@ -677,6 +674,10 @@ class ListaManager {
           newQuantity: newQty
         });
         
+        this.updateQuantity(product.id, newQty);
+      });
+    });
+
     return card;
   }
   
