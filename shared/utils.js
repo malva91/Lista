@@ -6,6 +6,108 @@ const weekCache = new Map();
 const productCache = new Map();
 const categoryCache = new Map();
 
+// Virtual scrolling e lazy loading
+const ITEMS_PER_BATCH = 20;
+const SCROLL_THRESHOLD = 200;
+
+// Intersection Observer per lazy loading
+let intersectionObserver = null;
+
+export function initIntersectionObserver() {
+  if (intersectionObserver) return intersectionObserver;
+  
+  intersectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const element = entry.target;
+        if (element.dataset.lazyLoad) {
+          const event = new CustomEvent('lazyLoad', { detail: { element } });
+          element.dispatchEvent(event);
+        }
+      }
+    });
+  }, {
+    rootMargin: '50px',
+    threshold: 0.1
+  });
+  
+  return intersectionObserver;
+}
+
+// Batch processing per rendering
+export function processBatch(items, batchSize = ITEMS_PER_BATCH, processor) {
+  return new Promise((resolve) => {
+    let index = 0;
+    const results = [];
+    
+    function processBatchChunk() {
+      const endIndex = Math.min(index + batchSize, items.length);
+      const batch = items.slice(index, endIndex);
+      
+      batch.forEach(item => {
+        try {
+          const result = processor(item, index);
+          if (result) results.push(result);
+        } catch (error) {
+          console.error('Errore processing batch item:', error, item);
+        }
+        index++;
+      });
+      
+      if (index < items.length) {
+        // Use requestIdleCallback if available, otherwise setTimeout
+        if (window.requestIdleCallback) {
+          requestIdleCallback(processBatchChunk, { timeout: 50 });
+        } else {
+          setTimeout(processBatchChunk, 0);
+        }
+      } else {
+        resolve(results);
+      }
+    }
+    
+    processBatchChunk();
+  });
+}
+
+// Debounced scroll handler
+export function createScrollHandler(callback, threshold = SCROLL_THRESHOLD) {
+  let ticking = false;
+  
+  return function(event) {
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        const scrollTop = event.target.scrollTop || window.pageYOffset;
+        const scrollHeight = event.target.scrollHeight || document.documentElement.scrollHeight;
+        const clientHeight = event.target.clientHeight || window.innerHeight;
+        
+        if (scrollHeight - scrollTop - clientHeight < threshold) {
+          callback();
+        }
+        
+        ticking = false;
+      });
+      ticking = true;
+    }
+  };
+}
+
+// Fragment-based DOM manipulation
+export function createDocumentFragment() {
+  return document.createDocumentFragment();
+}
+
+export function appendToFragment(fragment, elements) {
+  if (Array.isArray(elements)) {
+    elements.forEach(element => {
+      if (element) fragment.appendChild(element);
+    });
+  } else if (elements) {
+    fragment.appendChild(elements);
+  }
+  return fragment;
+}
+
 // IndexedDB per cache persistente
 let dbCache = null;
 

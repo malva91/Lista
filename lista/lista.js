@@ -11,10 +11,16 @@ class ListaManager {
     this.selectedDate = new Date();
     this.categories = [];
     this.products = [];
+    this.filteredProducts = [];
+    this.renderedProducts = [];
+    this.currentBatch = 0;
+    this.isLoading = false;
+    this.hasMoreProducts = true;
     this.currentList = { items: [], extras: [], status: {}, version: 0 };
     this.selectedCategory = '';
     this.searchTerm = '';
     this.collapsedCategories = new Set();
+    this.intersectionObserver = null;
     
     this.init();
   }
@@ -24,11 +30,295 @@ class ListaManager {
     initTheme();
     initHamburgerMenu();
     
+    // Initialize intersection observer for lazy loading
+    this.intersectionObserver = initIntersectionObserver();
+    
     this.setupDateSelector();
     this.setupEventListeners();
     
     document.getElementById('loadingProducts').classList.remove('hidden');
     
+    // Load data in parallel and show progress
+    await this.loadDataWithProgress();
+    await this.loadCurrentList();
+    
+    // Initial render with first batch
+    this.filterAndRenderProducts();
+  }
+  
+  async loadDataWithProgress() {
+    const loadingEl = document.getElementById('loadingProducts');
+    
+    try {
+      // Show progress
+      loadingEl.textContent = 'Caricamento categorie...';
+      await this.loadCategories();
+      
+      loadingEl.textContent = 'Caricamento prodotti...';
+      await this.loadProducts();
+      
+      loadingEl.textContent = 'Preparazione interfaccia...';
+      
+      // Small delay to show completion
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+    } catch (error) {
+      console.error('Errore caricamento dati:', error);
+      this.showError('Errore nel caricamento dei dati');
+    }
+  }
+
+  async loadProducts() {
+    try {
+      // Try to load from cache first
+      const cached = await getCachedProducts();
+      if (cached.isValid && cached.products.length > 0) {
+        this.products = cached.products.filter(product => 
+          product.name && product.categoryId && product.active !== false
+        ).sort((a, b) => a.name.localeCompare(b.name));
+        return;
+      }
+      
+      // Load from Firestore
+      const productsQuery = query(collection(db, 'products'), where('active', '==', true));
+      const productsSnap = await getDocs(productsQuery);
+      this.products = productsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })).filter(product => product.name && product.categoryId)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Cache the results
+      setCachedProducts(this.products);
+      
+    } catch (error) {
+      console.error('Errore caricamento prodotti:', error);
+      this.showError('Errore nel caricamento dei prodotti');
+      this.products = [];
+    }
+  }
+
+  setupEventListeners() {
+    const searchInput = safeQuerySelector('#searchInput');
+    if (searchInput) {
+      safeAddEventListener(searchInput, 'input', debounce((e) => {
+        this.searchTerm = e.target.value.toLowerCase();
+        this.resetPagination();
+        this.filterAndRenderProducts();
+      }, 300));
+    }
+
+    // Infinite scroll
+    const container = safeQuerySelector('#productsList');
+    if (container) {
+      const scrollHandler = createScrollHandler(() => {
+        if (this.hasMoreProducts && !this.isLoading) {
+          this.loadMoreProducts();
+        }
+      });
+      
+      safeAddEventListener(container, 'scroll', scrollHandler);
+      safeAddEventListener(window, 'scroll', scrollHandler);
+    }
+
+    const addExtraBtn = safeQuerySelector('#addExtraBtn');
+    if (addExtraBtn) {
+      safeAddEventListener(addExtraBtn, 'click', () => this.addExtra());
+    }
+
+    const extraName = safeQuerySelector('#extraName');
+    if (extraName) {
+      safeAddEventListener(extraName, 'keypress', (e) => {
+        if (e.key === 'Enter') this.addExtra();
+      });
+    }
+
+    const saveDraftBtn = safeQuerySelector('#saveDraftBtn');
+    if (saveDraftBtn) {
+      safeAddEventListener(saveDraftBtn, 'click', () => this.saveList(false));
+    }
+
+    const submitBtn = safeQuerySelector('#submitBtn');
+    if (submitBtn) {
+      safeAddEventListener(submitBtn, 'click', () => this.saveList(true));
+    }
+
+    const expandAllBtn = safeQuerySelector('#expandAllBtn');
+    if (expandAllBtn) {
+      safeAddEventListener(expandAllBtn, 'click', () => this.expandAllCategories());
+    }
+
+    const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
+    if (collapseAllBtn) {
+      safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
+    }
+
+    const deleteListBtn = safeQuerySelector('#deleteListBtn');
+    if (deleteListBtn) {
+      safeAddEventListener(deleteListBtn, 'click', () => this.deleteCurrentList());
+    }
+  }
+
+  resetPagination() {
+    this.currentBatch = 0;
+    this.renderedProducts = [];
+    this.hasMoreProducts = true;
+  }
+
+  filterAndRenderProducts() {
+    // Filter products
+    this.filteredProducts = this.products.filter(product => {
+      const matchesSearch = !this.searchTerm || 
+        product.name.toLowerCase().includes(this.searchTerm);
+      const matchesCategory = !this.selectedCategory || 
+        product.categoryId === this.selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+
+    // Reset and render first batch
+    this.resetPagination();
+    this.renderProducts();
+  }
+
+  async loadMoreProducts() {
+    if (this.isLoading || !this.hasMoreProducts) return;
+    
+    this.isLoading = true;
+    const startIndex = this.currentBatch * ITEMS_PER_BATCH;
+    const endIndex = startIndex + ITEMS_PER_BATCH;
+    
+    if (startIndex >= this.filteredProducts.length) {
+      this.hasMoreProducts = false;
+      this.isLoading = false;
+      return;
+    }
+    
+    const batch = this.filteredProducts.slice(startIndex, endIndex);
+    this.renderedProducts.push(...batch);
+    
+    this.currentBatch++;
+    this.hasMoreProducts = endIndex < this.filteredProducts.length;
+    
+    await this.renderProductsBatch(batch, startIndex === 0);
+    this.isLoading = false;
+  }
+
+  async renderProducts() {
+    const container = document.getElementById('productsList');
+    const loading = document.getElementById('loadingProducts');
+    
+    if (!container) return;
+    
+    loading.classList.add('hidden');
+    container.classList.remove('hidden');
+    
+    // Clear container for fresh render
+    container.innerHTML = '';
+    
+    // Load first batch
+    await this.loadMoreProducts();
+    
+    // Add loading indicator for infinite scroll
+    if (this.hasMoreProducts) {
+      this.addLoadingIndicator();
+    }
+  }
+
+  async renderProductsBatch(products, isFirstBatch = false) {
+    const container = document.getElementById('productsList');
+    if (!container) return;
+    
+    // Remove loading indicator if present
+    const existingIndicator = container.querySelector('.loading-more');
+    if (existingIndicator) {
+      existingIndicator.remove();
+    }
+    
+    // Group products by category
+    const groupedProducts = new Map();
+    products.forEach(product => {
+      if (!groupedProducts.has(product.categoryId)) {
+        groupedProducts.set(product.categoryId, []);
+      }
+      groupedProducts.get(product.categoryId).push(product);
+    });
+
+    // Create document fragment for better performance
+    const fragment = createDocumentFragment();
+    
+    // Process categories in batches
+    const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+      const categoryA = this.categories.find(c => c.id === categoryIdA);
+      const categoryB = this.categories.find(c => c.id === categoryIdB);
+      if (!categoryA || !categoryB) return 0;
+      return categoryA.name.localeCompare(categoryB.name);
+    });
+    
+    await processBatch(categoryEntries, 5, ([categoryId, categoryProducts]) => {
+      // Check if category section already exists
+      let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
+      
+      if (!categorySection) {
+        categorySection = this.createCategorySection(categoryId, categoryProducts);
+        if (categorySection) {
+          categorySection.setAttribute('data-category-id', categoryId);
+          fragment.appendChild(categorySection);
+        }
+      } else {
+        // Add products to existing category
+        const productsGrid = categorySection.querySelector('.products-grid');
+        if (productsGrid) {
+          const productFragment = createDocumentFragment();
+          categoryProducts.forEach(product => {
+            const productCard = this.createProductCard(product, this.categories.find(c => c.id === categoryId));
+            productFragment.appendChild(productCard);
+          });
+          productsGrid.appendChild(productFragment);
+        }
+      }
+      
+      return categorySection;
+    });
+    
+    // Append all at once for better performance
+    container.appendChild(fragment);
+    
+    // Add loading indicator if there are more products
+    if (this.hasMoreProducts) {
+      this.addLoadingIndicator();
+    }
+  }
+
+  addLoadingIndicator() {
+    const container = document.getElementById('productsList');
+    if (!container) return;
+    
+    const indicator = document.createElement('div');
+    indicator.className = 'loading-more';
+    indicator.style.cssText = `
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    `;
+    indicator.innerHTML = `
+      <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color); border-top: 2px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem;"></div>
+      Caricamento altri prodotti...
+    `;
+    
+    container.appendChild(indicator);
+    
+    // Use intersection observer to trigger loading
+    if (this.intersectionObserver) {
+      indicator.dataset.lazyLoad = 'true';
+      indicator.addEventListener('lazyLoad', () => {
+        if (this.hasMoreProducts && !this.isLoading) {
+          this.loadMoreProducts();
+        }
+      });
+      this.intersectionObserver.observe(indicator);
+    }
+  }
     await this.loadData();
     await this.loadCurrentList();
     this.renderProducts();
@@ -211,6 +501,9 @@ class ListaManager {
         btn.style.color = isActive ? getContrastColor(category.colorHex) : '';
       }
     });
+    
+    // Re-filter and render when category changes
+    this.filterAndRenderProducts();
   }
 
   renderProducts() {
@@ -326,13 +619,13 @@ class ListaManager {
     }
     
     this.saveCollapsedState();
-    this.renderProducts();
+    this.updateCategoryVisibility();
   }
 
   expandAllCategories() {
     this.collapsedCategories.clear();
     this.saveCollapsedState();
-    this.renderProducts();
+    this.updateCategoryVisibility();
     showToast('Tutte le categorie espanse', 'success');
   }
 
@@ -340,8 +633,34 @@ class ListaManager {
     const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
     this.saveCollapsedState();
-    this.renderProducts();
+    this.updateCategoryVisibility();
     showToast('Tutte le categorie chiuse', 'success');
+  }
+
+  updateCategoryVisibility() {
+    const categorySections = document.querySelectorAll('.category-section');
+    categorySections.forEach(section => {
+      const categoryId = section.getAttribute('data-category-id');
+      if (categoryId) {
+        const isCollapsed = this.collapsedCategories.has(categoryId);
+        const content = section.querySelector('.category-content');
+        const toggleIcon = section.querySelector('.category-toggle-icon');
+        
+        if (content && toggleIcon) {
+          if (isCollapsed) {
+            content.style.maxHeight = '0';
+            content.style.opacity = '0';
+            content.style.padding = '0';
+            toggleIcon.classList.add('collapsed');
+          } else {
+            content.style.maxHeight = '2000px';
+            content.style.opacity = '1';
+            content.style.padding = '0.5rem';
+            toggleIcon.classList.remove('collapsed');
+          }
+        }
+      }
+    });
   }
 
   loadCollapsedState() {
