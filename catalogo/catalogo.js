@@ -372,9 +372,6 @@ class CatalogoManager {
       return matchesSearch && matchesCategory;
     });
 
-    // Reset and render first batch
-    this.resetPagination();
-    
     const container = safeQuerySelector('#productsList');
     const loading = safeQuerySelector('#loadingProducts');
     
@@ -383,11 +380,42 @@ class CatalogoManager {
     loading.classList.add('hidden');
     container.classList.remove('hidden');
     
-    // Clear container for fresh render
+    // Render all filtered products at once
+    this.renderAllProducts();
+  }
+
+  async renderAllProducts() {
+    const container = safeQuerySelector('#productsList');
+    if (!container) return;
+    
+    // Clear container
     container.innerHTML = '';
     
-    // Load first batch
-    this.loadMoreProducts();
+    // Group all filtered products by category
+    const groupedProducts = new Map();
+    this.filteredProducts.forEach(product => {
+      if (!groupedProducts.has(product.categoryId)) {
+        groupedProducts.set(product.categoryId, []);
+      }
+      groupedProducts.get(product.categoryId).push(product);
+    });
+
+    // Sort categories alphabetically
+    const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+      const categoryA = this.categories.find(c => c.id === categoryIdA);
+      const categoryB = this.categories.find(c => c.id === categoryIdB);
+      if (!categoryA || !categoryB) return 0;
+      return categoryA.name.localeCompare(categoryB.name);
+    });
+    
+    // Render each category section
+    sortedCategoryEntries.forEach(([categoryId, categoryProducts]) => {
+      const categorySection = this.createCategorySection(categoryId, categoryProducts);
+      if (categorySection) {
+        categorySection.setAttribute('data-category-id', categoryId);
+        container.appendChild(categorySection);
+      }
+    });
   }
 
   async loadMoreProducts() {

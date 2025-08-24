@@ -382,10 +382,10 @@ export function getAdaptiveBatchSize() {
   const isMobileDevice = isMobile();
   
   if (isMobileDevice) {
-    return screenHeight < 600 ? 15 : 20;
+    return screenHeight < 600 ? 50 : 100; // Aumentato per caricare più prodotti
   }
   
-  return screenHeight < 800 ? 25 : 35;
+  return screenHeight < 800 ? 100 : 200; // Aumentato per desktop
 }
 
 export function scheduleRender(callback) {
