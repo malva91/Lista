@@ -32,17 +32,25 @@
             <div class="flex flex-wrap mt-2" id="categoryFilters"></div>
         </div>
 
+        <!-- Global Controls -->
+        <div class="global-controls">
+            <button id="expandAllBtn" class="btn btn-secondary">📂 Apri Tutti</button>
+            <button id="collapseAllBtn" class="btn btn-secondary">📁 Chiudi Tutti</button>
+        </div>
+
         <div id="loadingProducts" class="loading">Caricamento prodotti...</div>
         <div id="errorMessage" class="error hidden"></div>
         
-        <div class="flex justify-between mb-3">
-            <h2>📝 Lista Prodotti</h2>
-            <button id="deleteListBtn" class="btn btn-error" style="padding: 0.5rem 1rem;">
+        <h2 class="mb-3">📝 Lista Prodotti</h2>
+        
+        <div id="productsList" class="hidden"></div>
+
+        <!-- Delete List Button - Positioned after categories -->
+        <div class="delete-list-container">
+            <button id="deleteListBtn" class="btn btn-error">
                 🗑️ Elimina Lista (Test)
             </button>
         </div>
-        
-        <div id="productsList" class="hidden"></div>
 
         <div class="product-card">
             <h3>➕ Prodotti Extra</h3>

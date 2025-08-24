@@ -18,6 +18,7 @@ class ListaManager {
     this.currentList = { items: [], extras: [], status: {}, version: 0 };
     this.selectedCategory = '';
     this.searchTerm = '';
+    this.collapsedCategories = new Set(); // Track collapsed categories
     
     // Performance optimizations
     this.renderQueue = [];
@@ -185,6 +186,21 @@ class ListaManager {
         this.saveList(true);
       });
     }
+
+    // Global controls for expand/collapse
+    const expandAllBtn = safeQuerySelector('#expandAllBtn');
+    if (expandAllBtn) {
+      safeAddEventListener(expandAllBtn, 'click', () => {
+        this.expandAllCategories();
+      });
+    }
+
+    const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
+    if (collapseAllBtn) {
+      safeAddEventListener(collapseAllBtn, 'click', () => {
+        this.collapseAllCategories();
+      });
+    }
   }
 
   async loadCategories(updateCache = false) {
@@ -248,6 +264,9 @@ class ListaManager {
       });
       
       this.products = validProducts;
+      
+      // Load collapsed state after products are loaded
+      this.loadCollapsedState();
       
       // Update IndexedDB cache
       if (updateCache) {
@@ -477,40 +496,94 @@ class ListaManager {
 
     // Sort products within category alphabetically
     products.sort((a, b) => a.name.localeCompare(b.name));
+    const isCollapsed = this.collapsedCategories.has(categoryId);
+    
     const categorySection = document.createElement('div');
     categorySection.className = 'category-section compact';
     categorySection.style.background = `linear-gradient(135deg, ${category.colorHex}10 0%, transparent 100%)`;
     categorySection.style.border = `1px solid ${category.colorHex}30`;
     categorySection.style.borderRadius = '12px';
-    categorySection.style.padding = '0.5rem';
     categorySection.style.borderLeft = `4px solid ${category.colorHex}`;
     
-    const categoryHeader = document.createElement('h3');
-    categoryHeader.className = 'category-header-compact';
+    const categoryHeader = document.createElement('div');
+    categoryHeader.className = `category-header ${isCollapsed ? 'collapsed' : ''}`;
     categoryHeader.style.color = category.colorHex;
-    categoryHeader.style.margin = '0 0 0.5rem 0';
-    categoryHeader.style.fontSize = '0.95rem';
-    categoryHeader.style.fontWeight = '600';
-    categoryHeader.style.display = 'flex';
-    categoryHeader.style.alignItems = 'center';
-    categoryHeader.style.gap = '0.5rem';
     categoryHeader.innerHTML = `
-      <span>📂</span>
-      <span>${category.name}</span>
-      <span style="margin-left: auto; font-size: 0.7rem; opacity: 0.8;">${products.length}</span>
+      <div class="category-title">
+        <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
+        <span>📂</span>
+        <span style="font-weight: 600; font-size: 0.95rem;">${category.name}</span>
+      </div>
+      <span class="product-count">${products.length}</span>
     `;
+    
+    // Add click handler for toggle
+    categoryHeader.addEventListener('click', () => {
+      this.toggleCategory(categoryId);
+    });
+    
     categorySection.appendChild(categoryHeader);
 
+    const categoryContent = document.createElement('div');
+    categoryContent.className = `category-content ${isCollapsed ? 'collapsed' : ''}`;
+    
     const productsGrid = document.createElement('div');
     productsGrid.className = 'products-grid';
+    productsGrid.style.padding = '0.5rem';
 
     products.forEach(product => {
       const productCard = this.createProductCard(product, category);
       productsGrid.appendChild(productCard);
     });
 
-    categorySection.appendChild(productsGrid);
+    categoryContent.appendChild(productsGrid);
+    categorySection.appendChild(categoryContent);
     return categorySection;
+  }
+  
+  toggleCategory(categoryId) {
+    if (this.collapsedCategories.has(categoryId)) {
+      this.collapsedCategories.delete(categoryId);
+    } else {
+      this.collapsedCategories.add(categoryId);
+    }
+    
+    // Save state to localStorage
+    localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    
+    this.throttledRender();
+  }
+
+  expandAllCategories() {
+    this.collapsedCategories.clear();
+    localStorage.setItem('collapsedCategories', JSON.stringify([]));
+    this.throttledRender();
+    showToast('Tutte le categorie espanse', 'success');
+  }
+
+  collapseAllCategories() {
+    // Add all category IDs to collapsed set
+    const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
+    this.collapsedCategories = new Set(categoryIds);
+    localStorage.setItem('collapsedCategories', JSON.stringify([...this.collapsedCategories]));
+    this.throttledRender();
+    showToast('Tutte le categorie chiuse', 'success');
+  }
+
+  loadCollapsedState() {
+    try {
+      const saved = localStorage.getItem('collapsedCategories');
+      if (saved) {
+        this.collapsedCategories = new Set(JSON.parse(saved));
+      } else {
+        // Default: all categories collapsed
+        const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
+        this.collapsedCategories = new Set(categoryIds);
+      }
+    } catch (error) {
+      console.warn('Errore caricamento stato categorie:', error);
+      this.collapsedCategories = new Set();
+    }
   }
   
   // Attach event listeners after rendering from cache
