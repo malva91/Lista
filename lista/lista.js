@@ -302,7 +302,7 @@ class ListaManager {
     categoryContent.style.cssText = `
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       overflow: hidden;
-      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
+      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'opacity: 1; padding: 0.5rem;'}
     `;
     
     const productsGrid = document.createElement('div');
