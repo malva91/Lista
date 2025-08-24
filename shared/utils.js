@@ -382,10 +382,10 @@ export function getAdaptiveBatchSize() {
   const isMobileDevice = isMobile();
   
   if (isMobileDevice) {
-    return screenHeight < 600 ? 10 : 15;
+    return screenHeight < 600 ? 15 : 20;
   }
   
-  return screenHeight < 800 ? 20 : 30;
+  return screenHeight < 800 ? 25 : 35;
 }
 
 export function scheduleRender(callback) {

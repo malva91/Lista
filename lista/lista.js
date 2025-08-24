@@ -171,11 +171,20 @@ class ListaManager {
     // Optimized scroll handler
     const container = safeQuerySelector('#productsList');
     if (container) {
-      const scrollHandler = createScrollHandler((scrollInfo) => {
-        if (this.hasMoreProducts && !this.isLoading) {
+      const scrollHandler = (e) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.target;
+        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+        
+        // Load more when 80% scrolled
+        if (scrollPercentage > 0.8 && this.hasMoreProducts && !this.isLoading) {
+          console.log('Loading more products...', {
+            currentBatch: this.currentBatch,
+            hasMore: this.hasMoreProducts,
+            filteredCount: this.filteredProducts.length
+          });
           this.loadMoreProducts();
         }
-      }, 200); // Reduced threshold for better UX
+      };
       
       safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
@@ -311,7 +320,6 @@ class ListaManager {
     }
     
     const batch = this.filteredProducts.slice(startIndex, endIndex);
-    this.renderedProducts.push(...batch);
     
     this.currentBatch++;
     this.hasMoreProducts = endIndex < this.filteredProducts.length;
@@ -476,7 +484,25 @@ class ListaManager {
           categorySection = this.createCategorySection(categoryId, categoryProducts);
           if (categorySection) {
             categorySection.setAttribute('data-category-id', categoryId);
-            fragment.appendChild(categorySection);
+            // Find correct position to insert category (alphabetically)
+            const existingSections = Array.from(container.querySelectorAll('[data-category-id]'));
+            const categoryName = this.categories.find(c => c.id === categoryId)?.name || '';
+            
+            let insertPosition = null;
+            for (const section of existingSections) {
+              const sectionCategoryId = section.getAttribute('data-category-id');
+              const sectionCategoryName = this.categories.find(c => c.id === sectionCategoryId)?.name || '';
+              if (categoryName.localeCompare(sectionCategoryName) < 0) {
+                insertPosition = section;
+                break;
+              }
+            }
+            
+            if (insertPosition) {
+              container.insertBefore(categorySection, insertPosition);
+            } else {
+              container.appendChild(categorySection);
+            }
           }
         } else {
           // Add products to existing category
@@ -492,9 +518,6 @@ class ListaManager {
           }
         }
       });
-      
-      // Append all at once for better performance
-      container.appendChild(fragment);
     });
   }
   
