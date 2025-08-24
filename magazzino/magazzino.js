@@ -20,7 +20,6 @@ class MagazzinoManager {
   async init() {
     initMobileUtils();
     initTheme();
-    initHamburgerMenu();
     
     this.setupDateSelector();
     this.setupEventListeners();
@@ -30,6 +29,11 @@ class MagazzinoManager {
     await this.loadData();
     await this.loadCurrentList();
     await this.loadNotifications();
+    
+    // Initialize hamburger menu after everything is loaded
+    setTimeout(() => {
+      initHamburgerMenu();
+    }, 100);
   }
   
   async loadData() {

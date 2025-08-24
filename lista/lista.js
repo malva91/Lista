@@ -36,7 +36,6 @@ class ListaManager {
   async init() {
     initMobileUtils();
     initTheme();
-    initHamburgerMenu();
     
     // Initialize enhanced intersection observer
     this.intersectionObserver = initEnhancedIntersectionObserver();
@@ -53,6 +52,11 @@ class ListaManager {
     await this.loadCurrentList();
     await this.renderProductsOptimized();
     this.renderExtras();
+    
+    // Initialize hamburger menu after everything is loaded
+    setTimeout(() => {
+      initHamburgerMenu();
+    }, 100);
   }
   
   showLoadingState() {

@@ -33,7 +33,6 @@ class CatalogoManager {
   async init() {
     initMobileUtils();
     initTheme();
-    initHamburgerMenu();
     
     // Initialize enhanced intersection observer
     this.intersectionObserver = initEnhancedIntersectionObserver();
@@ -47,6 +46,11 @@ class CatalogoManager {
     
     await this.loadDataOptimized();
     this.filterAndRenderProducts();
+    
+    // Initialize hamburger menu after everything is loaded
+    setTimeout(() => {
+      initHamburgerMenu();
+    }, 100);
   }
   
   showLoadingState() {
