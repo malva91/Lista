@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#3b82f6">
     <meta name="format-detection" content="telephone=no">
     <title>Gestione Liste Prodotti</title>
-    <link rel="stylesheet" href="shared/styles.css">
+    <link rel="stylesheet" href="shared/styles.css?v=1.2.0">
 </head>
 <body>
     <div class="container">
@@ -78,12 +78,12 @@
             // Preload critical resources
             const preloadScript = document.createElement('link');
             preloadScript.rel = 'modulepreload';
-            preloadScript.href = 'shared/utils.js';
+            preloadScript.href = 'shared/utils.js?v=1.2.0';
             document.head.appendChild(preloadScript);
             
             const preloadFirebase = document.createElement('link');
             preloadFirebase.rel = 'modulepreload';
-            preloadFirebase.href = 'shared/firebase.js';
+            preloadFirebase.href = 'shared/firebase.js?v=1.2.0';
             document.head.appendChild(preloadFirebase);
             
             // Add loading states to buttons
@@ -130,12 +130,12 @@
         });
     </script>
     <script type="module">
-        import { initTheme } from './shared/utils.js';
+        import { initTheme } from './shared/utils.js?v=1.2.0';
         initTheme();
         
         // Initialize hamburger menu for homepage
         document.addEventListener('DOMContentLoaded', function() {
-            import('./shared/utils.js').then(({ initHamburgerMenu }) => {
+            import('./shared/utils.js?v=1.2.0').then(({ initHamburgerMenu }) => {
                 initHamburgerMenu();
             });
         });

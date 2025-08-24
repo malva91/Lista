@@ -1,10 +1,10 @@
-import { db } from '../shared/firebase.js';
+import { db } from '../shared/firebase.js?v=1.2.0';
 import { 
   collection, doc, getDocs, getDoc, setDoc, onSnapshot, deleteDoc,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { formatDate, getWeekString, getDayName, showToast, debounce , getContrastColor } from '../shared/utils.js';
-import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme, initHamburgerMenu } from '../shared/utils.js';
+import { formatDate, getWeekString, getDayName, showToast, debounce , getContrastColor } from '../shared/utils.js?v=1.2.0';
+import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, preloadCriticalData, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.2.0';
 
 // Cache per migliorare le performance
 const listCache = new Map();
