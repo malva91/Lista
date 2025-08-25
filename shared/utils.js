@@ -344,55 +344,20 @@ export function initHamburgerMenu() {
   if (!dropdown) {
     dropdown = document.createElement('div');
     dropdown.className = 'dropdown-menu';
-    const currentPath = window.location.pathname;
-    const basePath = currentPath.includes('/lista/') ? '../' : 
-                    currentPath.includes('/magazzino/') ? '../' : 
-                    currentPath.includes('/catalogo/') ? '../' : '';
-    
     dropdown.innerHTML = `
-      <a href="${basePath}" class="dropdown-item">🏠 Home</a>
-      <a href="${basePath}lista/" class="dropdown-item">📝 Lista Dipendenti</a>
-      <a href="${basePath}magazzino/" class="dropdown-item">📦 Magazzino</a>
-      <a href="${basePath}catalogo/" class="dropdown-item">📋 Gestione Catalogo</a>
+      <a href="/" class="dropdown-item">🏠 Home</a>
+      <a href="/lista/" class="dropdown-item">📝 Lista Dipendenti</a>
+      <a href="/magazzino/" class="dropdown-item">📦 Magazzino</a>
+      <a href="/catalogo/" class="dropdown-item">📋 Gestione Catalogo</a>
     `;
     document.body.appendChild(dropdown);
   }
   
-  // Remove existing event listeners to prevent duplicates
-  const newHamburger = hamburger.cloneNode(true);
-  hamburger.parentNode.replaceChild(newHamburger, hamburger);
-  hamburger = newHamburger;
-  
-  const newDropdown = dropdown.cloneNode(true);
-  dropdown.parentNode.replaceChild(newDropdown, dropdown);
-  dropdown = newDropdown;
-  
   hamburger.addEventListener('click', (e) => {
     e.stopPropagation();
-    e.preventDefault();
     hamburger.classList.toggle('open');
     dropdown.classList.toggle('show');
-    
-    // Add haptic feedback on mobile
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
-    }
   });
-  
-  // Add touch events for better mobile support
-  hamburger.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    hamburger.style.transform = 'scale(0.95)';
-  }, { passive: false });
-  
-  hamburger.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    hamburger.style.transform = '';
-    // Trigger click after touch
-    setTimeout(() => {
-      hamburger.click();
-    }, 50);
-  }, { passive: false });
   
   // Close menu when clicking outside
   document.addEventListener('click', (e) => {
@@ -402,44 +367,13 @@ export function initHamburgerMenu() {
     }
   });
   
-  // Close menu on touch outside (mobile)
-  document.addEventListener('touchstart', (e) => {
-    if (!hamburger.contains(e.target) && !dropdown.contains(e.target)) {
-      hamburger.classList.remove('open');
-      dropdown.classList.remove('show');
-    }
-  }, { passive: true });
-  
   // Close menu when clicking on a link
   dropdown.addEventListener('click', (e) => {
     if (e.target.classList.contains('dropdown-item')) {
       hamburger.classList.remove('open');
       dropdown.classList.remove('show');
-      
-      // Add loading state to clicked item
-      e.target.style.opacity = '0.7';
-      e.target.innerHTML = '⏳ Caricamento...';
     }
   });
-  
-  // Ensure menu is properly positioned on mobile
-  function updateMenuPosition() {
-    if (dropdown && isMobile()) {
-      const rect = hamburger.getBoundingClientRect();
-      dropdown.style.top = `${rect.bottom + 8}px`;
-      dropdown.style.left = `${rect.left}px`;
-      dropdown.style.right = 'auto';
-      dropdown.style.maxWidth = `${window.innerWidth - rect.left - 20}px`;
-    }
-  }
-  
-  // Update position on orientation change
-  window.addEventListener('orientationchange', () => {
-    setTimeout(updateMenuPosition, 100);
-  });
-  
-  // Initial position update
-  updateMenuPosition();
 }
 
 // Performance optimization utilities
@@ -448,10 +382,10 @@ export function getAdaptiveBatchSize() {
   const isMobileDevice = isMobile();
   
   if (isMobileDevice) {
-    return screenHeight < 600 ? 50 : 100; // Aumentato per caricare più prodotti
+    return screenHeight < 600 ? 10 : 15;
   }
   
-  return screenHeight < 800 ? 100 : 200; // Aumentato per desktop
+  return screenHeight < 800 ? 20 : 30;
 }
 
 export function scheduleRender(callback) {

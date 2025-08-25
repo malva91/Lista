@@ -36,6 +36,7 @@ class ListaManager {
   async init() {
     initMobileUtils();
     initTheme();
+    initHamburgerMenu();
     
     // Initialize enhanced intersection observer
     this.intersectionObserver = initEnhancedIntersectionObserver();
@@ -52,11 +53,6 @@ class ListaManager {
     await this.loadCurrentList();
     await this.renderProductsOptimized();
     this.renderExtras();
-    
-    // Initialize hamburger menu after everything is loaded
-    setTimeout(() => {
-      initHamburgerMenu();
-    }, 100);
   }
   
   showLoadingState() {
@@ -175,20 +171,11 @@ class ListaManager {
     // Optimized scroll handler
     const container = safeQuerySelector('#productsList');
     if (container) {
-      const scrollHandler = debounce((e) => {
-        const { scrollTop, scrollHeight, clientHeight } = e.target.scrollingElement || e.target;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-        
-        // Load more when 70% scrolled
-        if (scrollPercentage > 0.7 && this.hasMoreProducts && !this.isLoading) {
-          console.log('Loading more products...', {
-            currentBatch: this.currentBatch,
-            hasMore: this.hasMoreProducts,
-            filteredCount: this.filteredProducts.length
-          });
+      const scrollHandler = createScrollHandler((scrollInfo) => {
+        if (this.hasMoreProducts && !this.isLoading) {
           this.loadMoreProducts();
         }
-      }, 100);
+      }, 200); // Reduced threshold for better UX
       
       safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
@@ -288,6 +275,9 @@ class ListaManager {
       return matchesSearch && matchesCategory;
     });
 
+    // Reset and render first batch
+    this.resetPagination();
+    
     const container = document.getElementById('productsList');
     const loading = document.getElementById('loadingProducts');
     
@@ -296,42 +286,11 @@ class ListaManager {
     loading.classList.add('hidden');
     container.classList.remove('hidden');
     
-    // Render all filtered products at once
-    this.renderAllProducts();
-  }
-  
-  async renderAllProducts() {
-    const container = document.getElementById('productsList');
-    if (!container) return;
-    
-    // Clear container
+    // Clear container for fresh render
     container.innerHTML = '';
     
-    // Group all filtered products by category
-    const groupedProducts = new Map();
-    this.filteredProducts.forEach(product => {
-      if (!groupedProducts.has(product.categoryId)) {
-        groupedProducts.set(product.categoryId, []);
-      }
-      groupedProducts.get(product.categoryId).push(product);
-    });
-
-    // Sort categories alphabetically
-    const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-      const categoryA = this.categories.find(c => c.id === categoryIdA);
-      const categoryB = this.categories.find(c => c.id === categoryIdB);
-      if (!categoryA || !categoryB) return 0;
-      return categoryA.name.localeCompare(categoryB.name);
-    });
-    
-    // Render each category section
-    sortedCategoryEntries.forEach(([categoryId, categoryProducts]) => {
-      const categorySection = this.createCategorySection(categoryId, categoryProducts);
-      if (categorySection) {
-        categorySection.setAttribute('data-category-id', categoryId);
-        container.appendChild(categorySection);
-      }
-    });
+    // Load first batch
+    this.loadMoreProducts();
   }
   
   async loadMoreProducts() {
@@ -344,25 +303,20 @@ class ListaManager {
     const startIndex = this.currentBatch * batchSize;
     const endIndex = startIndex + batchSize;
     
-    console.log('Loading batch:', { startIndex, endIndex, totalFiltered: this.filteredProducts.length });
-    
     if (startIndex >= this.filteredProducts.length) {
       this.hasMoreProducts = false;
       this.hideLoadingIndicator();
       this.isLoading = false;
-      console.log('No more products to load');
       return;
     }
     
     const batch = this.filteredProducts.slice(startIndex, endIndex);
-    console.log('Batch products:', batch.length);
+    this.renderedProducts.push(...batch);
     
     this.currentBatch++;
     this.hasMoreProducts = endIndex < this.filteredProducts.length;
     
     await this.renderProductsBatch(batch, startIndex === 0);
-    
-    console.log('Batch rendered. HasMore:', this.hasMoreProducts, 'CurrentBatch:', this.currentBatch);
     
     this.hideLoadingIndicator();
     this.isLoading = false;
@@ -476,24 +430,23 @@ class ListaManager {
     loading.classList.add('hidden');
     container.classList.remove('hidden');
     
-    // Filter products first
-    this.filteredProducts = this.products.filter(product => {
-      const matchesSearch = !this.searchTerm || 
-        product.name.toLowerCase().includes(this.searchTerm);
-      const matchesCategory = !this.selectedCategory || 
-        product.categoryId === this.selectedCategory;
-      return matchesSearch && matchesCategory;
-    });
+    // Clear container for fresh render
+    container.innerHTML = '';
     
-    // Render all products
-    await this.renderAllProducts();
+    // Filter products if not already done
+    if (this.filteredProducts.length === 0) {
+      this.resetPagination();
+      this.filterAndRenderProducts();
+      return;
+    }
+    
+    // Load first batch
+    await this.loadMoreProducts();
   }
   
   async renderProductsBatch(products, isFirstBatch = false) {
     const container = safeQuerySelector('#productsList');
     if (!container) return;
-    
-    console.log('Rendering batch of', products.length, 'products');
     
     // Group products by category
     const groupedProducts = new Map();
@@ -504,54 +457,44 @@ class ListaManager {
       groupedProducts.get(product.categoryId).push(product);
     });
 
-    const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-      const categoryA = this.categories.find(c => c.id === categoryIdA);
-      const categoryB = this.categories.find(c => c.id === categoryIdB);
-      if (!categoryA || !categoryB) return 0;
-      return categoryA.name.localeCompare(categoryB.name);
-    });
-    
-    sortedCategoryEntries.forEach(([categoryId, categoryProducts]) => {
-      // Check if category section already exists
-      let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
+    // Use scheduled rendering for better performance
+    await scheduleRender(() => {
+      const fragment = document.createDocumentFragment();
       
-      if (!categorySection) {
-        categorySection = this.createCategorySection(categoryId, categoryProducts);
-        if (categorySection) {
-          categorySection.setAttribute('data-category-id', categoryId);
-          // Find correct position to insert category (alphabetically)
-          const existingSections = Array.from(container.querySelectorAll('[data-category-id]'));
-          const categoryName = this.categories.find(c => c.id === categoryId)?.name || '';
-          
-          let insertPosition = null;
-          for (const section of existingSections) {
-            const sectionCategoryId = section.getAttribute('data-category-id');
-            const sectionCategoryName = this.categories.find(c => c.id === sectionCategoryId)?.name || '';
-            if (categoryName.localeCompare(sectionCategoryName) < 0) {
-              insertPosition = section;
-              break;
-            }
+      const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+        const categoryA = this.categories.find(c => c.id === categoryIdA);
+        const categoryB = this.categories.find(c => c.id === categoryIdB);
+        if (!categoryA || !categoryB) return 0;
+        return categoryA.name.localeCompare(categoryB.name);
+      });
+      
+      sortedCategoryEntries.forEach(([categoryId, categoryProducts]) => {
+        // Check if category section already exists
+        let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
+        
+        if (!categorySection) {
+          categorySection = this.createCategorySection(categoryId, categoryProducts);
+          if (categorySection) {
+            categorySection.setAttribute('data-category-id', categoryId);
+            fragment.appendChild(categorySection);
           }
-          
-          if (insertPosition) {
-            container.insertBefore(categorySection, insertPosition);
-          } else {
-            container.appendChild(categorySection);
+        } else {
+          // Add products to existing category
+          const productsGrid = categorySection.querySelector('.products-grid');
+          if (productsGrid) {
+            const productFragment = document.createDocumentFragment();
+            categoryProducts.forEach(product => {
+              const category = this.categories.find(c => c.id === categoryId);
+              const productCard = this.createProductCard(product, category);
+              productFragment.appendChild(productCard);
+            });
+            productsGrid.appendChild(productFragment);
           }
         }
-      } else {
-        // Add products to existing category
-        const productsGrid = categorySection.querySelector('.products-grid');
-        if (productsGrid) {
-          const productFragment = document.createDocumentFragment();
-          categoryProducts.forEach(product => {
-            const category = this.categories.find(c => c.id === categoryId);
-            const productCard = this.createProductCard(product, category);
-            productFragment.appendChild(productCard);
-          });
-          productsGrid.appendChild(productFragment);
-        }
-      }
+      });
+      
+      // Append all at once for better performance
+      container.appendChild(fragment);
     });
   }
   

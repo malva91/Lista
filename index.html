@@ -135,11 +135,9 @@
         
         // Initialize hamburger menu for homepage
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(() => {
-                import('./shared/utils.js?v=1.2.0').then(({ initHamburgerMenu }) => {
-                    initHamburgerMenu();
-                });
-            }, 100);
+            import('./shared/utils.js?v=1.2.0').then(({ initHamburgerMenu }) => {
+                initHamburgerMenu();
+            });
         });
     </script>
 </body>

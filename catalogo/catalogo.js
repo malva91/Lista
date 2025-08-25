@@ -1,9 +1,9 @@
 import { db } from '../shared/firebase.js?v=1.2.0';
-import { 
+import {
   collection, doc, getDocs, getDoc, setDoc, deleteDoc, addDoc, updateDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { generateUniqueId, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.2.0';
-import { 
+import {
   safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu,
   getAdaptiveBatchSize, scheduleRender, globalBatchProcessor, smartPrefetcher,
   getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories,
@@ -26,33 +26,29 @@ class CatalogoManager {
     this.editingProduct = null;
     this.intersectionObserver = null;
     this.loadingIndicator = null;
-    
+
     this.init();
   }
 
   async init() {
     initMobileUtils();
     initTheme();
-    
+    initHamburgerMenu();
+
     // Initialize enhanced intersection observer
     this.intersectionObserver = initEnhancedIntersectionObserver();
-    
+
     // Preload critical data
     preloadCriticalData();
-    
+
     this.setupEventListeners();
-    
+
     this.showLoadingState();
-    
+
     await this.loadDataOptimized();
     this.filterAndRenderProducts();
-    
-    // Initialize hamburger menu after everything is loaded
-    setTimeout(() => {
-      initHamburgerMenu();
-    }, 100);
   }
-  
+
   showLoadingState() {
     const loadingEl = document.getElementById('loadingProducts');
     if (loadingEl) {
@@ -66,26 +62,26 @@ class CatalogoManager {
       `;
     }
   }
-  
+
   updateLoadingProgress(message) {
     const progressEl = document.getElementById('loadingProgress');
     if (progressEl) {
       progressEl.textContent = message;
     }
   }
-  
+
   async loadDataOptimized() {
     const startTime = performance.now();
-    
+
     try {
       this.updateLoadingProgress('Controllo cache locale...');
-      
+
       // Try to load from cache first
       const [cachedProducts, cachedCategories] = await Promise.all([
         getCachedProducts(),
         getCachedCategories()
       ]);
-      
+
       // Load categories first
       if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
         this.categories = cachedCategories.categories;
@@ -98,7 +94,7 @@ class CatalogoManager {
         this.updateLoadingProgress('Caricamento categorie...');
         await this.loadCategories();
       }
-      
+
       // Load products
       if (cachedProducts.isValid && cachedProducts.products.length > 0) {
         this.products = cachedProducts.products;
@@ -108,16 +104,16 @@ class CatalogoManager {
         await this.loadProducts();
         this.updateLoadingProgress(`${this.products.length} prodotti caricati`);
       }
-      
+
       const loadTime = performance.now() - startTime;
       console.log(`Catalogo caricato in ${loadTime.toFixed(2)}ms`);
-      
+
     } catch (error) {
       console.error('Errore caricamento dati:', error);
       this.showError('Errore nel caricamento dei dati');
     }
   }
-  
+
   async loadData() {
     try {
       await Promise.all([
@@ -168,37 +164,28 @@ class CatalogoManager {
     if (searchInput) {
       const debouncedSearch = debounce((e) => {
         this.searchTerm = e.target.value.toLowerCase();
-        
+
         // Track search patterns
         if (this.searchTerm.length > 2) {
           smartPrefetcher.trackInteraction('catalog_search', { term: this.searchTerm });
         }
-        
+
         this.resetPagination();
         this.filterAndRenderProducts();
       }, 200);
-      
+
       safeAddEventListener(searchInput, 'input', debouncedSearch);
     }
 
     // Optimized infinite scroll
     const container = safeQuerySelector('#productsList');
     if (container) {
-      const scrollHandler = debounce((e) => {
-        const { scrollTop, scrollHeight, clientHeight } = e.target.scrollingElement || e.target;
-        const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-        
-        // Load more when 70% scrolled
-        if (scrollPercentage > 0.7 && this.hasMoreProducts && !this.isLoading) {
-          console.log('Loading more products...', {
-            currentBatch: this.currentBatch,
-            hasMore: this.hasMoreProducts,
-            filteredCount: this.filteredProducts.length
-          });
+      const scrollHandler = createScrollHandler((scrollInfo) => {
+        if (this.hasMoreProducts && !this.isLoading) {
           this.loadMoreProducts();
         }
-      }, 100);
-      
+      }, 200);
+
       safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
 
@@ -232,10 +219,10 @@ class CatalogoManager {
         id: doc.id,
         ...doc.data()
       })).filter(category => category.name && category.colorHex);
-      
+
       // Cache categories
       setCachedCategories(this.categories);
-      
+
       this.renderCategoriesList();
       this.renderCategoryFilters();
       this.renderProductCategorySelect();
@@ -256,10 +243,10 @@ class CatalogoManager {
         ...doc.data()
       })).filter(product => product.name && product.categoryId)
         .sort((a, b) => a.name.localeCompare(b.name));
-      
+
       // Cache the results
       setCachedProducts(this.products);
-      
+
     } catch (error) {
       console.error('Errore caricamento prodotti:', error);
       this.showError('Errore nel caricamento dei prodotti');
@@ -277,15 +264,15 @@ class CatalogoManager {
   renderCategoriesList() {
     const container = safeQuerySelector('#categoriesList');
     if (!container) return;
-    
+
     container.innerHTML = '';
-    
+
     const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
-    
+
     sortedCategories.forEach(category => {
       const categoryDiv = document.createElement('div');
       categoryDiv.className = 'category-item';
-      
+
       categoryDiv.innerHTML = `
         <div class="category-item-content">
           <div class="category-info">
@@ -298,14 +285,14 @@ class CatalogoManager {
           </div>
         </div>
       `;
-      
+
       // Add event listeners
       const editBtn = categoryDiv.querySelector('.btn-edit');
       const deleteBtn = categoryDiv.querySelector('.btn-delete');
-      
+
       editBtn.addEventListener('click', () => this.editCategory(category.id));
       deleteBtn.addEventListener('click', () => this.deleteCategory(category.id));
-      
+
       container.appendChild(categoryDiv);
     });
   }
@@ -313,9 +300,9 @@ class CatalogoManager {
   renderCategoryFilters() {
     const container = safeQuerySelector('#categoryFilters');
     if (!container) return;
-    
+
     container.innerHTML = '';
-    
+
     const allBtn = document.createElement('button');
     allBtn.className = `btn btn-secondary ${!this.selectedCategory ? 'active' : ''}`;
     allBtn.textContent = 'Tutte';
@@ -325,7 +312,7 @@ class CatalogoManager {
       this.updateCategoryFilters();
     });
     container.appendChild(allBtn);
-    
+
     const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
     sortedCategories.forEach(category => {
       const btn = document.createElement('button');
@@ -345,7 +332,7 @@ class CatalogoManager {
   updateCategoryFilters() {
     const buttons = document.querySelectorAll('#categoryFilters button');
     const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
-    
+
     buttons.forEach((btn, index) => {
       if (index === 0) {
         btn.classList.toggle('active', !this.selectedCategory);
@@ -369,103 +356,76 @@ class CatalogoManager {
   filterAndRenderProducts() {
     // Filter products
     this.filteredProducts = this.products.filter(product => {
-      const matchesSearch = !this.searchTerm || 
+      const matchesSearch = !this.searchTerm ||
         product.name.toLowerCase().includes(this.searchTerm);
-      const matchesCategory = !this.selectedCategory || 
+      const matchesCategory = !this.selectedCategory ||
         product.categoryId === this.selectedCategory;
       return matchesSearch && matchesCategory;
     });
 
+    // Reset and render first batch
+    this.resetPagination();
+
     const container = safeQuerySelector('#productsList');
     const loading = safeQuerySelector('#loadingProducts');
-    
+
     if (!container) return;
-    
+
     loading.classList.add('hidden');
     container.classList.remove('hidden');
-    
-    // Render all filtered products at once
-    this.renderAllProducts();
-  }
 
-  async renderAllProducts() {
-    const container = safeQuerySelector('#productsList');
-    if (!container) return;
-    
-    // Clear container
+    // Clear container for fresh render
     container.innerHTML = '';
-    
-    // Group all filtered products by category
-    const groupedProducts = new Map();
-    this.filteredProducts.forEach(product => {
-      if (!groupedProducts.has(product.categoryId)) {
-        groupedProducts.set(product.categoryId, []);
-      }
-      groupedProducts.get(product.categoryId).push(product);
-    });
 
-    // Sort categories alphabetically
-    const sortedCategoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-      const categoryA = this.categories.find(c => c.id === categoryIdA);
-      const categoryB = this.categories.find(c => c.id === categoryIdB);
-      if (!categoryA || !categoryB) return 0;
-      return categoryA.name.localeCompare(categoryB.name);
-    });
-    
-    // Render each category section
-    sortedCategoryEntries.forEach(([categoryId, categoryProducts]) => {
-      const categorySection = this.createCategorySection(categoryId, categoryProducts);
-      if (categorySection) {
-        categorySection.setAttribute('data-category-id', categoryId);
-        container.appendChild(categorySection);
-      }
-    });
+    // Load first batch
+    this.loadMoreProducts();
   }
 
   async loadMoreProducts() {
     if (this.isLoading || !this.hasMoreProducts) return;
-    
+
     this.isLoading = true;
     this.showLoadingIndicator();
-    
+
     const batchSize = getAdaptiveBatchSize();
     const startIndex = this.currentBatch * batchSize;
     const endIndex = startIndex + batchSize;
-    
+
     if (startIndex >= this.filteredProducts.length) {
       this.hasMoreProducts = false;
       this.hideLoadingIndicator();
       this.isLoading = false;
       return;
     }
-    
+
     const batch = this.filteredProducts.slice(startIndex, endIndex);
-    
+    this.renderedProducts.push(...batch);
+
     this.currentBatch++;
     this.hasMoreProducts = endIndex < this.filteredProducts.length;
-    
+
     await this.renderProductsBatch(batch, startIndex === 0);
-    
+
     this.hideLoadingIndicator();
     this.isLoading = false;
   }
 
   showLoadingIndicator() {
     if (this.loadingIndicator) return;
-    
+
     const container = safeQuerySelector('#productsList');
     if (!container) return;
-    
+
     this.loadingIndicator = document.createElement('div');
     this.loadingIndicator.className = 'loading-more';
     this.loadingIndicator.innerHTML = `
       <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color); border-top: 2px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem;"></div>
       Caricamento altri prodotti...
     `;
-    
+
     container.appendChild(this.loadingIndicator);
   }
-  
+
   hideLoadingIndicator() {
     if (this.loadingIndicator && this.loadingIndicator.parentNode) {
       this.loadingIndicator.remove();
@@ -475,9 +435,9 @@ class CatalogoManager {
   renderProductCategorySelect() {
     const select = safeQuerySelector('#productCategory');
     if (!select) return;
-    
+
     select.innerHTML = '<option value="">Seleziona categoria</option>';
-    
+
     const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
     sortedCategories.forEach(category => {
       const option = document.createElement('option');
@@ -490,18 +450,18 @@ class CatalogoManager {
   renderProducts() {
     const container = safeQuerySelector('#productsList');
     const loading = safeQuerySelector('#loadingProducts');
-    
+
     if (!container) return;
-    
+
     loading.classList.add('hidden');
     container.classList.remove('hidden');
-    
+
     // Clear container for fresh render
     container.innerHTML = '';
-    
+
     // Reset pagination state
     this.resetPagination();
-    
+
     // Load first batch
     this.loadMoreProducts();
   }
@@ -509,7 +469,7 @@ class CatalogoManager {
   async renderProductsBatch(products, isFirstBatch = false) {
     const container = safeQuerySelector('#productsList');
     if (!container) return;
-    
+
     // Group products by category
     const groupedProducts = new Map();
     products.forEach(product => {
@@ -522,41 +482,23 @@ class CatalogoManager {
     // Use scheduled rendering for better performance
     await scheduleRender(() => {
       const fragment = document.createDocumentFragment();
-      
+
       const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
         const categoryA = this.categories.find(c => c.id === categoryIdA);
         const categoryB = this.categories.find(c => c.id === categoryIdB);
         if (!categoryA || !categoryB) return 0;
         return categoryA.name.localeCompare(categoryB.name);
       });
-      
+
       categoryEntries.forEach(([categoryId, categoryProducts]) => {
         // Check if category section already exists
         let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
-        
+
         if (!categorySection) {
           categorySection = this.createCategorySection(categoryId, categoryProducts);
           if (categorySection) {
             categorySection.setAttribute('data-category-id', categoryId);
-            // Find correct position to insert category (alphabetically)
-            const existingSections = Array.from(container.querySelectorAll('[data-category-id]'));
-            const categoryName = this.categories.find(c => c.id === categoryId)?.name || '';
-            
-            let insertPosition = null;
-            for (const section of existingSections) {
-              const sectionCategoryId = section.getAttribute('data-category-id');
-              const sectionCategoryName = this.categories.find(c => c.id === sectionCategoryId)?.name || '';
-              if (categoryName.localeCompare(sectionCategoryName) < 0) {
-                insertPosition = section;
-                break;
-              }
-            }
-            
-            if (insertPosition) {
-              container.insertBefore(categorySection, insertPosition);
-            } else {
-              container.appendChild(categorySection);
-            }
+            fragment.appendChild(categorySection);
           }
         } else {
           // Add products to existing category
@@ -572,6 +514,9 @@ class CatalogoManager {
           }
         }
       });
+
+      // Append all at once for better performance
+      container.appendChild(fragment);
     });
   }
 
@@ -581,7 +526,7 @@ class CatalogoManager {
 
     products.sort((a, b) => a.name.localeCompare(b.name));
     const isCollapsed = this.collapsedCategories.has(categoryId);
-    
+
     const categorySection = document.createElement('div');
     categorySection.className = 'category-section compact';
     categorySection.style.willChange = 'transform, opacity'; // Optimize for animations
@@ -590,7 +535,7 @@ class CatalogoManager {
     categorySection.style.borderRadius = '12px';
     categorySection.style.borderLeft = `4px solid ${category.colorHex}`;
     categorySection.style.overflow = 'hidden';
-    
+
     const categoryHeader = document.createElement('div');
     categoryHeader.className = 'category-header';
     categoryHeader.style.cssText = `
@@ -611,17 +556,17 @@ class CatalogoManager {
       </div>
       <span class="product-count">${products.length}</span>
     `;
-    
+
     categoryHeader.addEventListener('click', () => {
       // Track category interactions
       smartPrefetcher.trackInteraction('catalog_category_toggle', {
         categoryId: category.id,
         action: this.collapsedCategories.has(categoryId) ? 'expand' : 'collapse'
       });
-      
+
       this.toggleCategory(categoryId);
     });
-    
+
     categorySection.appendChild(categoryHeader);
 
     const categoryContent = document.createElement('div');
@@ -631,7 +576,7 @@ class CatalogoManager {
       overflow: hidden;
       ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
     `;
-    
+
     const productsGrid = document.createElement('div');
     productsGrid.className = 'products-grid';
 
@@ -649,7 +594,7 @@ class CatalogoManager {
     const card = document.createElement('div');
     card.className = 'product-card';
     card.style.willChange = 'transform, opacity'; // Optimize for animations
-    
+
     card.innerHTML = `
       <div class="product-header">
         <div>
@@ -672,12 +617,12 @@ class CatalogoManager {
     // Add event listeners
     const editBtn = card.querySelector('.btn-edit');
     const deleteBtn = card.querySelector('.btn-delete');
-    
+
     editBtn.addEventListener('click', () => {
       smartPrefetcher.trackInteraction('product_edit', { productId: product.id });
       this.editProduct(product.id);
     });
-    
+
     deleteBtn.addEventListener('click', () => {
       smartPrefetcher.trackInteraction('product_delete', { productId: product.id });
       this.deleteProduct(product.id);
@@ -692,7 +637,7 @@ class CatalogoManager {
     } else {
       this.collapsedCategories.add(categoryId);
     }
-    
+
     this.saveCollapsedState();
     this.updateCategoryVisibility();
   }
@@ -720,7 +665,7 @@ class CatalogoManager {
         const isCollapsed = this.collapsedCategories.has(categoryId);
         const content = section.querySelector('.category-content');
         const toggleIcon = section.querySelector('.category-toggle-icon');
-        
+
         if (content && toggleIcon) {
           if (isCollapsed) {
             content.style.maxHeight = '0';
@@ -761,41 +706,41 @@ class CatalogoManager {
   async addCategory() {
     const nameInput = safeQuerySelector('#categoryName');
     const colorInput = safeQuerySelector('#categoryColor');
-    
+
     if (!nameInput || !colorInput) return;
-    
+
     const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 50, required: true });
     if (!nameValidation.valid) {
       showToast(nameValidation.error, 'error');
       return;
     }
-    
+
     const name = nameValidation.value;
     const colorHex = colorInput.value;
-    
+
     // Check for duplicate names
     if (this.categories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
       showToast('Esiste già una categoria con questo nome', 'error');
       return;
     }
-    
+
     try {
       const categoryId = await generateUniqueId('categories', name, db);
-      
+
       const categoryData = {
         name,
         colorHex,
         createdAt: new Date()
       };
-      
+
       await setDoc(doc(db, 'categories', categoryId), categoryData);
-      
+
       nameInput.value = '';
       colorInput.value = '#3b82f6';
-      
+
       await this.loadCategories();
       this.filterAndRenderProducts();
-      
+
       showToast('Categoria aggiunta con successo', 'success');
     } catch (error) {
       console.error('Errore aggiunta categoria:', error);
@@ -806,61 +751,61 @@ class CatalogoManager {
   editCategory(categoryId) {
     const category = this.categories.find(c => c.id === categoryId);
     if (!category) return;
-    
+
     const nameInput = safeQuerySelector('#categoryName');
     const colorInput = safeQuerySelector('#categoryColor');
     const addBtn = safeQuerySelector('#addCategoryBtn');
     const updateBtn = safeQuerySelector('#updateCategoryBtn');
     const cancelBtn = safeQuerySelector('#cancelCategoryBtn');
-    
+
     if (!nameInput || !colorInput || !addBtn || !updateBtn || !cancelBtn) return;
-    
+
     nameInput.value = category.name;
     colorInput.value = category.colorHex;
-    
+
     addBtn.classList.add('hidden');
     updateBtn.classList.remove('hidden');
     cancelBtn.classList.remove('hidden');
-    
+
     this.editingCategory = categoryId;
   }
 
   async updateCategory() {
     if (!this.editingCategory) return;
-    
+
     const nameInput = safeQuerySelector('#categoryName');
     const colorInput = safeQuerySelector('#categoryColor');
-    
+
     if (!nameInput || !colorInput) return;
-    
+
     const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 50, required: true });
     if (!nameValidation.valid) {
       showToast(nameValidation.error, 'error');
       return;
     }
-    
+
     const name = nameValidation.value;
     const colorHex = colorInput.value;
-    
+
     // Check for duplicate names (excluding current category)
     if (this.categories.some(cat => cat.id !== this.editingCategory && cat.name.toLowerCase() === name.toLowerCase())) {
       showToast('Esiste già una categoria con questo nome', 'error');
       return;
     }
-    
+
     try {
       const categoryData = {
         name,
         colorHex,
         updatedAt: new Date()
       };
-      
+
       await updateDoc(doc(db, 'categories', this.editingCategory), categoryData);
-      
+
       this.cancelCategoryEdit();
       await this.loadCategories();
       this.filterAndRenderProducts();
-      
+
       showToast('Categoria aggiornata con successo', 'success');
     } catch (error) {
       console.error('Errore aggiornamento categoria:', error);
@@ -874,38 +819,38 @@ class CatalogoManager {
     const addBtn = safeQuerySelector('#addCategoryBtn');
     const updateBtn = safeQuerySelector('#updateCategoryBtn');
     const cancelBtn = safeQuerySelector('#cancelCategoryBtn');
-    
+
     if (nameInput) nameInput.value = '';
     if (colorInput) colorInput.value = '#3b82f6';
-    
+
     if (addBtn) addBtn.classList.remove('hidden');
     if (updateBtn) updateBtn.classList.add('hidden');
     if (cancelBtn) cancelBtn.classList.add('hidden');
-    
+
     this.editingCategory = null;
   }
 
   async deleteCategory(categoryId) {
     const category = this.categories.find(c => c.id === categoryId);
     if (!category) return;
-    
+
     // Check if category has products
     const hasProducts = this.products.some(p => p.categoryId === categoryId);
     if (hasProducts) {
       showToast('Impossibile eliminare: la categoria contiene prodotti', 'error');
       return;
     }
-    
+
     if (!confirm(`Sei sicuro di voler eliminare la categoria "${category.name}"?`)) {
       return;
     }
-    
+
     try {
       await deleteDoc(doc(db, 'categories', categoryId));
-      
+
       await this.loadCategories();
       this.filterAndRenderProducts();
-      
+
       showToast('Categoria eliminata con successo', 'success');
     } catch (error) {
       console.error('Errore eliminazione categoria:', error);
@@ -918,34 +863,34 @@ class CatalogoManager {
     const categorySelect = safeQuerySelector('#productCategory');
     const importantCheck = safeQuerySelector('#productImportant');
     const activeCheck = safeQuerySelector('#productActive');
-    
+
     if (!nameInput || !categorySelect || !importantCheck || !activeCheck) return;
-    
+
     const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 100, required: true });
     if (!nameValidation.valid) {
       showToast(nameValidation.error, 'error');
       return;
     }
-    
+
     if (!categorySelect.value) {
       showToast('Seleziona una categoria', 'error');
       return;
     }
-    
+
     const name = nameValidation.value;
     const categoryId = categorySelect.value;
     const important = importantCheck.checked;
     const active = activeCheck.checked;
-    
+
     // Check for duplicate names in same category
     if (this.products.some(p => p.categoryId === categoryId && p.name.toLowerCase() === name.toLowerCase())) {
       showToast('Esiste già un prodotto con questo nome nella categoria selezionata', 'error');
       return;
     }
-    
+
     try {
       const productId = await generateUniqueId('products', name, db);
-      
+
       const productData = {
         name,
         categoryId,
@@ -953,17 +898,17 @@ class CatalogoManager {
         active,
         createdAt: new Date()
       };
-      
+
       await setDoc(doc(db, 'products', productId), productData);
-      
+
       nameInput.value = '';
       categorySelect.value = '';
       importantCheck.checked = false;
       activeCheck.checked = true;
-      
+
       await this.loadProducts();
       this.filterAndRenderProducts();
-      
+
       showToast('Prodotto aggiunto con successo', 'success');
     } catch (error) {
       console.error('Errore aggiunta prodotto:', error);
@@ -974,7 +919,7 @@ class CatalogoManager {
   editProduct(productId) {
     const product = this.products.find(p => p.id === productId);
     if (!product) return;
-    
+
     const nameInput = safeQuerySelector('#productName');
     const categorySelect = safeQuerySelector('#productCategory');
     const importantCheck = safeQuerySelector('#productImportant');
@@ -982,53 +927,53 @@ class CatalogoManager {
     const addBtn = safeQuerySelector('#addProductBtn');
     const updateBtn = safeQuerySelector('#updateProductBtn');
     const cancelBtn = safeQuerySelector('#cancelProductBtn');
-    
+
     if (!nameInput || !categorySelect || !importantCheck || !activeCheck || !addBtn || !updateBtn || !cancelBtn) return;
-    
+
     nameInput.value = product.name;
     categorySelect.value = product.categoryId;
     importantCheck.checked = product.important || false;
     activeCheck.checked = product.active !== false;
-    
+
     addBtn.classList.add('hidden');
     updateBtn.classList.remove('hidden');
     cancelBtn.classList.remove('hidden');
-    
+
     this.editingProduct = productId;
   }
 
   async updateProduct() {
     if (!this.editingProduct) return;
-    
+
     const nameInput = safeQuerySelector('#productName');
     const categorySelect = safeQuerySelector('#productCategory');
     const importantCheck = safeQuerySelector('#productImportant');
     const activeCheck = safeQuerySelector('#productActive');
-    
+
     if (!nameInput || !categorySelect || !importantCheck || !activeCheck) return;
-    
+
     const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 100, required: true });
     if (!nameValidation.valid) {
       showToast(nameValidation.error, 'error');
       return;
     }
-    
+
     if (!categorySelect.value) {
       showToast('Seleziona una categoria', 'error');
       return;
     }
-    
+
     const name = nameValidation.value;
     const categoryId = categorySelect.value;
     const important = importantCheck.checked;
     const active = activeCheck.checked;
-    
+
     // Check for duplicate names in same category (excluding current product)
     if (this.products.some(p => p.id !== this.editingProduct && p.categoryId === categoryId && p.name.toLowerCase() === name.toLowerCase())) {
       showToast('Esiste già un prodotto con questo nome nella categoria selezionata', 'error');
       return;
     }
-    
+
     try {
       const productData = {
         name,
@@ -1037,13 +982,13 @@ class CatalogoManager {
         active,
         updatedAt: new Date()
       };
-      
+
       await updateDoc(doc(db, 'products', this.editingProduct), productData);
-      
+
       this.cancelProductEdit();
       await this.loadProducts();
       this.filterAndRenderProducts();
-      
+
       showToast('Prodotto aggiornato con successo', 'success');
     } catch (error) {
       console.error('Errore aggiornamento prodotto:', error);
@@ -1059,33 +1004,33 @@ class CatalogoManager {
     const addBtn = safeQuerySelector('#addProductBtn');
     const updateBtn = safeQuerySelector('#updateProductBtn');
     const cancelBtn = safeQuerySelector('#cancelProductBtn');
-    
+
     if (nameInput) nameInput.value = '';
     if (categorySelect) categorySelect.value = '';
     if (importantCheck) importantCheck.checked = false;
     if (activeCheck) activeCheck.checked = true;
-    
+
     if (addBtn) addBtn.classList.remove('hidden');
     if (updateBtn) updateBtn.classList.add('hidden');
     if (cancelBtn) cancelBtn.classList.add('hidden');
-    
+
     this.editingProduct = null;
   }
 
   async deleteProduct(productId) {
     const product = this.products.find(p => p.id === productId);
     if (!product) return;
-    
+
     if (!confirm(`Sei sicuro di voler eliminare il prodotto "${product.name}"?`)) {
       return;
     }
-    
+
     try {
       await deleteDoc(doc(db, 'products', productId));
-      
+
       await this.loadProducts();
       this.filterAndRenderProducts();
-      
+
       showToast('Prodotto eliminato con successo', 'success');
     } catch (error) {
       console.error('Errore eliminazione prodotto:', error);
@@ -1101,19 +1046,19 @@ class CatalogoManager {
         exportDate: new Date().toISOString(),
         version: '1.2.0'
       };
-      
+
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
+
       const a = document.createElement('a');
       a.href = url;
       a.download = `catalogo-export-${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      
+
       URL.revokeObjectURL(url);
-      
+
       showToast('Dati esportati con successo', 'success');
     } catch (error) {
       console.error('Errore esportazione:', error);
@@ -1124,43 +1069,47 @@ class CatalogoManager {
   async importData(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
+
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      
+
       if (!data.categories || !data.products) {
         showToast('File non valido: mancano categorie o prodotti', 'error');
         return;
       }
-      
+
       if (!confirm('Questo sostituirà tutti i dati esistenti. Continuare?')) {
         return;
       }
-      
+
       // Import categories first
-      for (const category of data.categories) {
-        if (category.name && category.colorHex) {
-          const categoryId = await generateUniqueId('categories', category.name, db);
-          await setDoc(doc(db, 'categories', categoryId), {
-            name: category.name,
-            colorHex: category.colorHex,
-            createdAt: new Date()
-          });
-        }
-      }
-      
+for (const category of data.categories) {
+  if (category.name && category.colorHex) {
+    const categoryId = await generateUniqueId('categories', category.name, db);
+    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
+
+    await setDoc(doc(db, 'categories', categoryId), {
+      name: category.name,
+      colorHex: category.colorHex,
+      categoryIds: categoryIds,
+      createdAt: new Date()
+    });
+  }
+}
+
+
       // Reload categories to get new IDs
       await this.loadCategories();
-      
+
       // Import products with updated category IDs
       for (const product of data.products) {
         if (product.name && product.categoryId) {
           // Find matching category by name
-          const matchingCategory = this.categories.find(c => 
+          const matchingCategory = this.categories.find(c =>
             data.categories.find(dc => dc.id === product.categoryId)?.name === c.name
           );
-          
+
           if (matchingCategory) {
             const productId = await generateUniqueId('products', product.name, db);
             await setDoc(doc(db, 'products', productId), {
@@ -1173,16 +1122,16 @@ class CatalogoManager {
           }
         }
       }
-      
+
       await this.loadProducts();
       this.filterAndRenderProducts();
-      
+
       showToast('Dati importati con successo', 'success');
     } catch (error) {
       console.error('Errore importazione:', error);
       showToast('Errore durante l\'importazione', 'error');
     }
-    
+
     // Reset file input
     event.target.value = '';
   }
