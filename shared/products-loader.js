@@ -243,6 +243,7 @@ class ProductsLoader {
     return {
       totalProducts: this.products.length,
       totalCategories: this.categories.length,
+      visibleCategories: this.getVisibleCategories().length,
       activeProducts: this.products.filter(p => p.active !== false).length,
       importantProducts: this.products.filter(p => p.important).length,
       productsByCategory: this.categories.map(cat => ({
@@ -250,6 +251,26 @@ class ProductsLoader {
         count: this.getProductsByCategory(cat.id).length
       }))
     };
+  }
+
+  // Ottieni solo le categorie che hanno prodotti attivi
+  getVisibleCategories() {
+    return this.categories.filter(category => {
+      const productsInCategory = this.products.filter(p => p.categoryId === category.id);
+      return productsInCategory.length > 0;
+    });
+  }
+
+  // Ottieni categorie con conteggio prodotti
+  getCategoriesWithCount() {
+    return this.categories.map(category => {
+      const productsInCategory = this.products.filter(p => p.categoryId === category.id);
+      return {
+        ...category,
+        productCount: productsInCategory.length,
+        hasProducts: productsInCategory.length > 0
+      };
+    }).filter(cat => cat.hasProducts);
   }
 }
 

@@ -325,7 +325,10 @@ class ListaManager {
     });
     container.appendChild(allBtn);
     
-    const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
+    // Usa solo le categorie che hanno prodotti
+    const categoriesWithProducts = productsLoader.getCategoriesWithCount();
+    const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
+    
     sortedCategories.forEach(category => {
       const btn = document.createElement('button');
       btn.className = `btn btn-secondary ${this.selectedCategory === category.id ? 'active' : ''}`;
@@ -349,7 +352,8 @@ class ListaManager {
 
   updateCategoryFilters() {
     const buttons = document.querySelectorAll('#categoryFilters button');
-    const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
+    const categoriesWithProducts = productsLoader.getCategoriesWithCount();
+    const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
     
     buttons.forEach((btn, index) => {
       if (index === 0) {

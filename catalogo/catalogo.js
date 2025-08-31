@@ -109,7 +109,7 @@ class CatalogoManager {
     const importantProductsEl = document.getElementById('importantProducts');
     
     if (totalProductsEl) totalProductsEl.textContent = stats.totalProducts;
-    if (totalCategoriesEl) totalCategoriesEl.textContent = stats.totalCategories;
+    if (totalCategoriesEl) totalCategoriesEl.textContent = stats.visibleCategories;
     if (activeProductsEl) activeProductsEl.textContent = stats.activeProducts;
     if (importantProductsEl) importantProductsEl.textContent = stats.importantProducts;
   }
@@ -269,7 +269,10 @@ class CatalogoManager {
     });
     container.appendChild(allBtn);
 
-    const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
+    // Usa solo le categorie che hanno prodotti
+    const categoriesWithProducts = productsLoader.getCategoriesWithCount();
+    const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
+    
     sortedCategories.forEach(category => {
       const btn = document.createElement('button');
       btn.className = `btn btn-secondary ${this.selectedCategory === category.id ? 'active' : ''}`;
@@ -287,7 +290,8 @@ class CatalogoManager {
 
   updateCategoryFilters() {
     const buttons = document.querySelectorAll('#categoryFilters button');
-    const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
+    const categoriesWithProducts = productsLoader.getCategoriesWithCount();
+    const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
 
     buttons.forEach((btn, index) => {
       if (index === 0) {
