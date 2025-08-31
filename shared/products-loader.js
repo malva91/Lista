@@ -52,8 +52,8 @@ class ProductsLoader {
         .filter(prod => prod.active !== false) // Solo prodotti attivi
         .sort((a, b) => {
           // Prima per categoria, poi per priorità, poi per nome
-          const catA = this.categories.find(c => c.id === prod.categoryId);
-          const catB = this.categories.find(c => c.id === prod.categoryId);
+          const catA = this.categories.find(c => c.id === a.categoryId);
+          const catB = this.categories.find(c => c.id === b.categoryId);
           
           if (catA && catB && catA.order !== catB.order) {
             return catA.order - catB.order;
