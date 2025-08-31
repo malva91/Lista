@@ -261,6 +261,11 @@ class ProductsLoader {
     });
   }
 
+  // Ottieni tutte le categorie (anche quelle senza prodotti)
+  getAllCategories() {
+    return this.categories.sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+
   // Ottieni categorie con conteggio prodotti
   getCategoriesWithCount() {
     return this.categories.map(category => {
@@ -270,7 +275,7 @@ class ProductsLoader {
         productCount: productsInCategory.length,
         hasProducts: productsInCategory.length > 0
       };
-    }).filter(cat => cat.hasProducts);
+    }).sort((a, b) => (a.order || 0) - (b.order || 0));
   }
 }
 

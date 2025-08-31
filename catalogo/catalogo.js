@@ -270,7 +270,7 @@ class CatalogoManager {
     container.appendChild(allBtn);
 
     // Usa solo le categorie che hanno prodotti
-    const categoriesWithProducts = productsLoader.getCategoriesWithCount();
+    const categoriesWithProducts = productsLoader.getCategoriesWithCount().filter(cat => cat.hasProducts);
     const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
     
     sortedCategories.forEach(category => {
