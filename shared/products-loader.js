@@ -47,9 +47,22 @@ class ProductsLoader {
         .sort((a, b) => (a.order || 0) - (b.order || 0));
       
       // Processa prodotti
-      this.products = (data.products || [])
-        .filter(prod => prod.id && prod.name && prod.categoryId)
-        .filter(prod => prod.active !== false) // Solo prodotti attivi
+      const allProducts = (data.products || [])
+        .filter(prod => prod.id && prod.name && prod.categoryId);
+      
+      console.log(`📊 Prodotti totali nel JSON: ${allProducts.length}`);
+      
+      // Filtra solo prodotti attivi (active === true o active non definito)
+      this.products = allProducts
+        .filter(prod => {
+          // Se active non è definito, considera il prodotto attivo
+          // Se active è definito, deve essere true
+          const isActive = prod.active === undefined || prod.active === true;
+          if (!isActive) {
+            console.log(`❌ Prodotto inattivo escluso: ${prod.name} (active: ${prod.active})`);
+          }
+          return isActive;
+        })
         .sort((a, b) => {
           // Prima per categoria, poi per priorità, poi per nome
           const catA = this.categories.find(c => c.id === a.categoryId);
@@ -73,7 +86,15 @@ class ProductsLoader {
       
       const loadTime = performance.now() - startTime;
       console.log(`✅ Prodotti caricati in ${loadTime.toFixed(2)}ms`);
-      console.log(`📊 ${this.products.length} prodotti, ${this.categories.length} categorie`);
+      console.log(`📊 ${this.products.length} prodotti attivi su ${allProducts.length} totali, ${this.categories.length} categorie`);
+      
+      // Debug: mostra distribuzione per categoria
+      this.categories.forEach(cat => {
+        const count = this.products.filter(p => p.categoryId === cat.id).length;
+        if (count > 0) {
+          console.log(`📂 ${cat.name}: ${count} prodotti`);
+        }
+      });
       
       return { products: this.products, categories: this.categories };
       
