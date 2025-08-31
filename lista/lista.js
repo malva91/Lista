@@ -196,6 +196,20 @@ class ListaManager {
       safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
     }
 
+    // Show all products button
+    const showAllBtn = safeQuerySelector('#showAllBtn');
+    if (showAllBtn) {
+      safeAddEventListener(showAllBtn, 'click', () => {
+        this.selectedCategory = '';
+        this.searchTerm = '';
+        const searchInput = safeQuerySelector('#searchInput');
+        if (searchInput) searchInput.value = '';
+        this.filterAndRenderProducts();
+        this.updateCategoryFilters();
+        showToast(`Visualizzati tutti i ${this.products.length} prodotti`, 'success');
+      });
+    }
+
     const deleteListBtn = safeQuerySelector('#deleteListBtn');
     if (deleteListBtn) {
       safeAddEventListener(deleteListBtn, 'click', () => this.deleteCurrentList());
@@ -218,6 +232,10 @@ class ListaManager {
         product.categoryId === this.selectedCategory;
       return matchesSearch && matchesCategory;
     });
+
+    console.log(`🔍 Lista - Filtro applicato: ${this.filteredProducts.length} prodotti su ${this.products.length} totali`);
+    if (this.searchTerm) console.log(`📝 Termine ricerca: "${this.searchTerm}"`);
+    if (this.selectedCategory) console.log(`📂 Categoria selezionata: "${this.selectedCategory}"`);
 
     // Reset and render first batch
     this.resetPagination();

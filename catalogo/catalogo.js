@@ -160,6 +160,20 @@ class CatalogoManager {
       safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
     }
 
+    // Show all products button
+    const showAllBtn = safeQuerySelector('#showAllBtn');
+    if (showAllBtn) {
+      safeAddEventListener(showAllBtn, 'click', () => {
+        this.selectedCategory = '';
+        this.searchTerm = '';
+        const searchInput = safeQuerySelector('#searchInput');
+        if (searchInput) searchInput.value = '';
+        this.filterAndRenderProducts();
+        this.updateCategoryFilters();
+        showToast(`Visualizzati tutti i ${this.products.length} prodotti`, 'success');
+      });
+    }
+
     // Import/Export
     const exportBtn = safeQuerySelector('#exportBtn');
     if (exportBtn) {
@@ -323,6 +337,10 @@ class CatalogoManager {
       return matchesSearch && matchesCategory;
     });
 
+    console.log(`🔍 Filtro applicato: ${this.filteredProducts.length} prodotti su ${this.products.length} totali`);
+    if (this.searchTerm) console.log(`📝 Termine ricerca: "${this.searchTerm}"`);
+    if (this.selectedCategory) console.log(`📂 Categoria selezionata: "${this.selectedCategory}"`);
+
     // Reset and render first batch
     this.resetPagination();
 
@@ -337,8 +355,52 @@ class CatalogoManager {
     // Clear container for fresh render
     container.innerHTML = '';
 
-    // Load first batch
-    this.loadMoreProducts();
+    // Render all products at once for catalog management
+    this.renderAllProducts();
+  }
+
+  async renderAllProducts() {
+    const container = safeQuerySelector('#productsList');
+    if (!container) return;
+
+    console.log(`🎨 Rendering ${this.filteredProducts.length} prodotti...`);
+
+    // Group all filtered products by category
+    const groupedProducts = new Map();
+    this.filteredProducts.forEach(product => {
+      if (!groupedProducts.has(product.categoryId)) {
+        groupedProducts.set(product.categoryId, []);
+      }
+      groupedProducts.get(product.categoryId).push(product);
+    });
+
+    console.log(`📊 Prodotti raggruppati in ${groupedProducts.size} categorie`);
+
+    // Use scheduled rendering for better performance
+    await scheduleRender(() => {
+      const fragment = document.createDocumentFragment();
+
+      const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+        const categoryA = this.categories.find(c => c.id === categoryIdA);
+        const categoryB = this.categories.find(c => c.id === categoryIdB);
+        if (!categoryA || !categoryB) return 0;
+        return categoryA.name.localeCompare(categoryB.name);
+      });
+
+      categoryEntries.forEach(([categoryId, categoryProducts]) => {
+        const categorySection = this.createCategorySection(categoryId, categoryProducts);
+        if (categorySection) {
+          categorySection.setAttribute('data-category-id', categoryId);
+          fragment.appendChild(categorySection);
+        }
+      });
+
+      // Clear and append all at once
+      container.innerHTML = '';
+      container.appendChild(fragment);
+      
+      console.log(`✅ Rendering completato: ${categoryEntries.length} categorie visualizzate`);
+    });
   }
 
   async loadMoreProducts() {

@@ -79,6 +79,12 @@ class ProductsLoader {
           return a.name.localeCompare(b.name);
         });
 
+      console.log(`📋 Prodotti per categoria:`);
+      this.categories.forEach(cat => {
+        const count = this.products.filter(p => p.categoryId === cat.id).length;
+        console.log(`  📂 ${cat.name}: ${count} prodotti`);
+      });
+
       // Crea indici per performance
       this.createIndices();
       
@@ -87,14 +93,6 @@ class ProductsLoader {
       const loadTime = performance.now() - startTime;
       console.log(`✅ Prodotti caricati in ${loadTime.toFixed(2)}ms`);
       console.log(`📊 ${this.products.length} prodotti attivi su ${allProducts.length} totali, ${this.categories.length} categorie`);
-      
-      // Debug: mostra distribuzione per categoria
-      this.categories.forEach(cat => {
-        const count = this.products.filter(p => p.categoryId === cat.id).length;
-        if (count > 0) {
-          console.log(`📂 ${cat.name}: ${count} prodotti`);
-        }
-      });
       
       return { products: this.products, categories: this.categories };
       
