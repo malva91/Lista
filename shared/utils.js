@@ -9,7 +9,6 @@ let performanceMetrics = {
 };
 
 // Cache management
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const CACHE_VERSION = '1.2.0';
 
 // Mobile detection
@@ -592,69 +591,6 @@ export function createScrollHandler(callback, threshold = 100) {
   };
 }
 
-// Cache management for products and categories
-export async function getCachedProducts() {
-  try {
-    const cached = localStorage.getItem(`products_cache_${CACHE_VERSION}`);
-    if (!cached) return { products: [], isValid: false };
-    
-    const data = JSON.parse(cached);
-    const isValid = (Date.now() - data.timestamp) < CACHE_DURATION;
-    
-    return {
-      products: data.products || [],
-      isValid
-    };
-  } catch (error) {
-    console.warn('Error reading products cache:', error);
-    return { products: [], isValid: false };
-  }
-}
-
-export function setCachedProducts(products) {
-  try {
-    const data = {
-      products,
-      timestamp: Date.now(),
-      version: CACHE_VERSION
-    };
-    localStorage.setItem(`products_cache_${CACHE_VERSION}`, JSON.stringify(data));
-  } catch (error) {
-    console.warn('Error setting products cache:', error);
-  }
-}
-
-export async function getCachedCategories() {
-  try {
-    const cached = localStorage.getItem(`categories_cache_${CACHE_VERSION}`);
-    if (!cached) return { categories: [], isValid: false };
-    
-    const data = JSON.parse(cached);
-    const isValid = (Date.now() - data.timestamp) < CACHE_DURATION;
-    
-    return {
-      categories: data.categories || [],
-      isValid
-    };
-  } catch (error) {
-    console.warn('Error reading categories cache:', error);
-    return { categories: [], isValid: false };
-  }
-}
-
-export function setCachedCategories(categories) {
-  try {
-    const data = {
-      categories,
-      timestamp: Date.now(),
-      version: CACHE_VERSION
-    };
-    localStorage.setItem(`categories_cache_${CACHE_VERSION}`, JSON.stringify(data));
-  } catch (error) {
-    console.warn('Error setting categories cache:', error);
-  }
-}
-
 // Preload critical data
 export function preloadCriticalData() {
   // Preload Firebase modules
@@ -668,6 +604,12 @@ export function preloadCriticalData() {
     link.href = url;
     document.head.appendChild(link);
   });
+  
+  // Preload products JSON
+  const jsonPreload = document.createElement('link');
+  jsonPreload.rel = 'prefetch';
+  jsonPreload.href = '/prodotti.json?v=1.2.0';
+  document.head.appendChild(jsonPreload);
   
   // Warm up IndexedDB
   if ('indexedDB' in window) {

@@ -33,51 +33,44 @@
 
     <div class="container">
         <div class="grid grid-2 mb-4">
-            <!-- Sezione Categorie -->
-            <div class="product-card">
-                <h2 class="mb-3">📁 Categorie</h2>
-                
-                <div class="form-group">
-                    <input type="text" id="categoryName" class="form-input" placeholder="Nome categoria">
-                </div>
-                <div class="form-group">
-                    <input type="color" id="categoryColor" class="form-input" value="#3b82f6">
-                </div>
-                <div class="flex mb-3">
-                    <button id="addCategoryBtn" class="btn btn-primary">Aggiungi Categoria</button>
-                    <button id="updateCategoryBtn" class="btn btn-warning hidden">Aggiorna Categoria</button>
-                    <button id="cancelCategoryBtn" class="btn btn-secondary hidden">Annulla</button>
-                </div>
-                
-                <div id="categoriesList"></div>
-            </div>
-
-            <!-- Sezione Prodotti -->
-            <div class="product-card">
-                <h2 class="mb-3">📦 Prodotti</h2>
-                
-                <div class="form-group">
-                    <input type="text" id="productName" class="form-input" placeholder="Nome prodotto">
-                </div>
-                <div class="form-group">
-                    <select id="productCategory" class="form-select">
-                        <option value="">Seleziona categoria</option>
-                    </select>
-                </div>
-                <div class="flex mb-3">
-                    <label class="flex" style="align-items: center;">
-                        <input type="checkbox" id="productImportant" style="margin-right: 0.5rem;">
-                        Prodotto importante
-                    </label>
-                    <label class="flex" style="align-items: center;">
-                        <input type="checkbox" id="productActive" checked style="margin-right: 0.5rem;">
-                        Prodotto attivo
-                    </label>
-                </div>
-                <div class="flex mb-3">
-                    <button id="addProductBtn" class="btn btn-primary">Aggiungi Prodotto</button>
-                    <button id="updateProductBtn" class="btn btn-warning hidden">Aggiorna Prodotto</button>
-                    <button id="cancelProductBtn" class="btn btn-secondary hidden">Annulla</button>
+            <!-- Informazioni Catalogo -->
+            <div class="product-card" style="grid-column: 1 / -1;">
+                <h2 class="mb-3">📋 Gestione Catalogo</h2>
+                <div class="info-panel">
+                    <div class="info-item">
+                        <h3>📄 Sorgente Dati</h3>
+                        <p>I prodotti e le categorie sono caricati dal file <code>prodotti.json</code></p>
+                        <p class="text-secondary">Per modificare il catalogo, aggiorna il file JSON e ricarica la pagina</p>
+                    </div>
+                    <div class="info-item">
+                        <h3>🔄 Come Aggiornare</h3>
+                        <ol class="info-list">
+                            <li>Modifica il file <code>prodotti.json</code> nella root del progetto</li>
+                            <li>Aggiungi/rimuovi prodotti o categorie</li>
+                            <li>Ricarica la pagina per vedere le modifiche</li>
+                        </ol>
+                    </div>
+                    <div class="info-item">
+                        <h3>📊 Statistiche Catalogo</h3>
+                        <div id="catalogStats" class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-number" id="totalProducts">-</span>
+                                <span class="stat-label">Prodotti Totali</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number" id="totalCategories">-</span>
+                                <span class="stat-label">Categorie</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number" id="activeProducts">-</span>
+                                <span class="stat-label">Prodotti Attivi</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-number" id="importantProducts">-</span>
+                                <span class="stat-label">Prodotti Importanti</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

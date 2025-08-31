@@ -1,0 +1,354 @@
+{
+  "version": "1.2.0",
+  "lastUpdated": "2025-01-27T10:30:00.000Z",
+  "categories": [
+    {
+      "id": "bevande-calde",
+      "name": "Bevande Calde",
+      "colorHex": "#dc2626",
+      "order": 1
+    },
+    {
+      "id": "bevande-fredde",
+      "name": "Bevande Fredde",
+      "colorHex": "#2563eb",
+      "order": 2
+    },
+    {
+      "id": "dolci",
+      "name": "Dolci",
+      "colorHex": "#f59e0b",
+      "order": 3
+    },
+    {
+      "id": "salati",
+      "name": "Salati",
+      "colorHex": "#10b981",
+      "order": 4
+    },
+    {
+      "id": "gelati",
+      "name": "Gelati",
+      "colorHex": "#8b5cf6",
+      "order": 5
+    },
+    {
+      "id": "ingredienti",
+      "name": "Ingredienti",
+      "colorHex": "#f97316",
+      "order": 6
+    }
+  ],
+  "products": [
+    {
+      "id": "caffe-espresso",
+      "name": "Caffè Espresso",
+      "categoryId": "bevande-calde",
+      "unit": "tazze",
+      "important": true,
+      "active": true,
+      "priority": 1,
+      "notes": "Miscela arabica premium"
+    },
+    {
+      "id": "cappuccino",
+      "name": "Cappuccino",
+      "categoryId": "bevande-calde",
+      "unit": "tazze",
+      "important": true,
+      "active": true,
+      "priority": 2,
+      "notes": "Con latte fresco"
+    },
+    {
+      "id": "latte-macchiato",
+      "name": "Latte Macchiato",
+      "categoryId": "bevande-calde",
+      "unit": "tazze",
+      "important": false,
+      "active": true,
+      "priority": 3,
+      "notes": ""
+    },
+    {
+      "id": "te-verde",
+      "name": "Tè Verde",
+      "categoryId": "bevande-calde",
+      "unit": "tazze",
+      "important": false,
+      "active": true,
+      "priority": 4,
+      "notes": "Biologico"
+    },
+    {
+      "id": "cioccolata-calda",
+      "name": "Cioccolata Calda",
+      "categoryId": "bevande-calde",
+      "unit": "tazze",
+      "important": false,
+      "active": true,
+      "priority": 5,
+      "notes": "Con panna montata"
+    },
+    {
+      "id": "acqua-naturale",
+      "name": "Acqua Naturale",
+      "categoryId": "bevande-fredde",
+      "unit": "bottiglie",
+      "important": true,
+      "active": true,
+      "priority": 1,
+      "notes": "50cl"
+    },
+    {
+      "id": "acqua-frizzante",
+      "name": "Acqua Frizzante",
+      "categoryId": "bevande-fredde",
+      "unit": "bottiglie",
+      "important": true,
+      "active": true,
+      "priority": 2,
+      "notes": "50cl"
+    },
+    {
+      "id": "coca-cola",
+      "name": "Coca Cola",
+      "categoryId": "bevande-fredde",
+      "unit": "lattine",
+      "important": false,
+      "active": true,
+      "priority": 3,
+      "notes": "33cl"
+    },
+    {
+      "id": "aranciata",
+      "name": "Aranciata",
+      "categoryId": "bevande-fredde",
+      "unit": "lattine",
+      "important": false,
+      "active": true,
+      "priority": 4,
+      "notes": "33cl"
+    },
+    {
+      "id": "succo-arancia",
+      "name": "Succo d'Arancia",
+      "categoryId": "bevande-fredde",
+      "unit": "bicchieri",
+      "important": false,
+      "active": true,
+      "priority": 5,
+      "notes": "Fresco spremuto"
+    },
+    {
+      "id": "birra-media",
+      "name": "Birra Media",
+      "categoryId": "bevande-fredde",
+      "unit": "bicchieri",
+      "important": false,
+      "active": true,
+      "priority": 6,
+      "notes": "40cl"
+    },
+    {
+      "id": "cornetto-vuoto",
+      "name": "Cornetto Vuoto",
+      "categoryId": "dolci",
+      "unit": "pezzi",
+      "important": true,
+      "active": true,
+      "priority": 1,
+      "notes": "Fresco del giorno"
+    },
+    {
+      "id": "cornetto-crema",
+      "name": "Cornetto alla Crema",
+      "categoryId": "dolci",
+      "unit": "pezzi",
+      "important": true,
+      "active": true,
+      "priority": 2,
+      "notes": "Crema pasticcera"
+    },
+    {
+      "id": "cornetto-marmellata",
+      "name": "Cornetto alla Marmellata",
+      "categoryId": "dolci",
+      "unit": "pezzi",
+      "important": true,
+      "active": true,
+      "priority": 3,
+      "notes": "Albicocca"
+    },
+    {
+      "id": "maritozzo",
+      "name": "Maritozzo",
+      "categoryId": "dolci",
+      "unit": "pezzi",
+      "important": false,
+      "active": true,
+      "priority": 4,
+      "notes": "Con panna"
+    },
+    {
+      "id": "bombolone",
+      "name": "Bombolone",
+      "categoryId": "dolci",
+      "unit": "pezzi",
+      "important": false,
+      "active": true,
+      "priority": 5,
+      "notes": "Zucchero o nutella"
+    },
+    {
+      "id": "crostata",
+      "name": "Crostata",
+      "categoryId": "dolci",
+      "unit": "fette",
+      "important": false,
+      "active": true,
+      "priority": 6,
+      "notes": "Frutta di stagione"
+    },
+    {
+      "id": "tramezzino-tonno",
+      "name": "Tramezzino Tonno",
+      "categoryId": "salati",
+      "unit": "pezzi",
+      "important": true,
+      "active": true,
+      "priority": 1,
+      "notes": "Con maionese"
+    },
+    {
+      "id": "tramezzino-prosciutto",
+      "name": "Tramezzino Prosciutto",
+      "categoryId": "salati",
+      "unit": "pezzi",
+      "important": true,
+      "active": true,
+      "priority": 2,
+      "notes": "Cotto e mozzarella"
+    },
+    {
+      "id": "panino-porchetta",
+      "name": "Panino Porchetta",
+      "categoryId": "salati",
+      "unit": "pezzi",
+      "important": false,
+      "active": true,
+      "priority": 3,
+      "notes": "Con verdure"
+    },
+    {
+      "id": "toast",
+      "name": "Toast",
+      "categoryId": "salati",
+      "unit": "pezzi",
+      "important": false,
+      "active": true,
+      "priority": 4,
+      "notes": "Prosciutto e formaggio"
+    },
+    {
+      "id": "piadina",
+      "name": "Piadina",
+      "categoryId": "salati",
+      "unit": "pezzi",
+      "important": false,
+      "active": true,
+      "priority": 5,
+      "notes": "Farcita a scelta"
+    },
+    {
+      "id": "gelato-coppa",
+      "name": "Gelato Coppa",
+      "categoryId": "gelati",
+      "unit": "coppe",
+      "important": false,
+      "active": true,
+      "priority": 1,
+      "notes": "2 gusti"
+    },
+    {
+      "id": "gelato-cono",
+      "name": "Gelato Cono",
+      "categoryId": "gelati",
+      "unit": "coni",
+      "important": false,
+      "active": true,
+      "priority": 2,
+      "notes": "1-2 gusti"
+    },
+    {
+      "id": "granita",
+      "name": "Granita",
+      "categoryId": "gelati",
+      "unit": "bicchieri",
+      "important": false,
+      "active": true,
+      "priority": 3,
+      "notes": "Gusti vari"
+    },
+    {
+      "id": "ghiacciolo",
+      "name": "Ghiacciolo",
+      "categoryId": "gelati",
+      "unit": "pezzi",
+      "important": false,
+      "active": true,
+      "priority": 4,
+      "notes": "Frutta"
+    },
+    {
+      "id": "latte",
+      "name": "Latte",
+      "categoryId": "ingredienti",
+      "unit": "litri",
+      "important": true,
+      "active": true,
+      "priority": 1,
+      "notes": "Fresco intero"
+    },
+    {
+      "id": "zucchero",
+      "name": "Zucchero",
+      "categoryId": "ingredienti",
+      "unit": "kg",
+      "important": true,
+      "active": true,
+      "priority": 2,
+      "notes": "Semolato"
+    },
+    {
+      "id": "caffe-grani",
+      "name": "Caffè in Grani",
+      "categoryId": "ingredienti",
+      "unit": "kg",
+      "important": true,
+      "active": true,
+      "priority": 3,
+      "notes": "Miscela bar"
+    },
+    {
+      "id": "panna",
+      "name": "Panna",
+      "categoryId": "ingredienti",
+      "unit": "litri",
+      "important": false,
+      "active": true,
+      "priority": 4,
+      "notes": "Da montare"
+    },
+    {
+      "id": "nutella",
+      "name": "Nutella",
+      "categoryId": "ingredienti",
+      "unit": "vasetti",
+      "important": false,
+      "active": true,
+      "priority": 5,
+      "notes": "400g"
+    }
+  ]
+}

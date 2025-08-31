@@ -6,9 +6,9 @@ import { generateUniqueId, showToast, debounce, getContrastColor } from '../shar
 import {
   safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu,
   getAdaptiveBatchSize, scheduleRender, globalBatchProcessor, smartPrefetcher,
-  getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories,
   preloadCriticalData, initEnhancedIntersectionObserver, createScrollHandler
 } from '../shared/utils.js?v=1.2.0';
+import { productsLoader } from '../shared/products-loader.js?v=1.2.0';
 
 class CatalogoManager {
   constructor() {
@@ -74,90 +74,50 @@ class CatalogoManager {
     const startTime = performance.now();
 
     try {
-      this.updateLoadingProgress('Controllo cache locale...');
-
-      // Try to load from cache first
-      const [cachedProducts, cachedCategories] = await Promise.all([
-        getCachedProducts(),
-        getCachedCategories()
-      ]);
-
-      // Load categories first
-      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
-        this.categories = cachedCategories.categories;
-        this.renderCategoriesList();
-        this.renderCategoryFilters();
-        this.renderProductCategorySelect();
-        this.loadCollapsedState();
-        this.updateLoadingProgress('Categorie caricate dalla cache');
-      } else {
-        this.updateLoadingProgress('Caricamento categorie...');
-        await this.loadCategories();
-      }
-
-      // Load products
-      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
-        this.products = cachedProducts.products;
-        this.updateLoadingProgress(`${this.products.length} prodotti caricati dalla cache`);
-      } else {
-        this.updateLoadingProgress('Caricamento prodotti dal server...');
-        await this.loadProducts();
-        this.updateLoadingProgress(`${this.products.length} prodotti caricati`);
-      }
+      this.updateLoadingProgress('Caricamento catalogo prodotti...');
+      
+      // Carica prodotti e categorie dal JSON
+      const { products, categories } = await productsLoader.loadProducts();
+      
+      this.products = products;
+      this.categories = categories;
+      
+      this.renderCategoriesList();
+      this.renderCategoryFilters();
+      this.renderProductCategorySelect();
+      this.loadCollapsedState();
+      
+      this.updateLoadingProgress(`${this.products.length} prodotti caricati dal catalogo`);
 
       const loadTime = performance.now() - startTime;
       console.log(`Catalogo caricato in ${loadTime.toFixed(2)}ms`);
 
+      // Aggiorna statistiche
+      this.updateStats();
     } catch (error) {
       console.error('Errore caricamento dati:', error);
-      this.showError('Errore nel caricamento dei dati');
+      this.showError(`Errore nel caricamento del catalogo: ${error.message}`);
     }
   }
 
-  async loadData() {
-    try {
-      await Promise.all([
-        this.loadCategories(),
-        this.loadProducts()
-      ]);
-    } catch (error) {
-      console.error('Errore caricamento dati:', error);
-      this.showError('Errore nel caricamento dei dati');
-    }
+  updateStats() {
+    const stats = productsLoader.getStats();
+    
+    const totalProductsEl = document.getElementById('totalProducts');
+    const totalCategoriesEl = document.getElementById('totalCategories');
+    const activeProductsEl = document.getElementById('activeProducts');
+    const importantProductsEl = document.getElementById('importantProducts');
+    
+    if (totalProductsEl) totalProductsEl.textContent = stats.totalProducts;
+    if (totalCategoriesEl) totalCategoriesEl.textContent = stats.totalCategories;
+    if (activeProductsEl) activeProductsEl.textContent = stats.activeProducts;
+    if (importantProductsEl) importantProductsEl.textContent = stats.importantProducts;
   }
 
   setupEventListeners() {
     // Category management
-    const addCategoryBtn = safeQuerySelector('#addCategoryBtn');
-    if (addCategoryBtn) {
-      safeAddEventListener(addCategoryBtn, 'click', () => this.addCategory());
-    }
-
-    const updateCategoryBtn = safeQuerySelector('#updateCategoryBtn');
-    if (updateCategoryBtn) {
-      safeAddEventListener(updateCategoryBtn, 'click', () => this.updateCategory());
-    }
-
-    const cancelCategoryBtn = safeQuerySelector('#cancelCategoryBtn');
-    if (cancelCategoryBtn) {
-      safeAddEventListener(cancelCategoryBtn, 'click', () => this.cancelCategoryEdit());
-    }
-
-    // Product management
-    const addProductBtn = safeQuerySelector('#addProductBtn');
-    if (addProductBtn) {
-      safeAddEventListener(addProductBtn, 'click', () => this.addProduct());
-    }
-
-    const updateProductBtn = safeQuerySelector('#updateProductBtn');
-    if (updateProductBtn) {
-      safeAddEventListener(updateProductBtn, 'click', () => this.updateProduct());
-    }
-
-    const cancelProductBtn = safeQuerySelector('#cancelProductBtn');
-    if (cancelProductBtn) {
-      safeAddEventListener(cancelProductBtn, 'click', () => this.cancelProductEdit());
-    }
+    // Le operazioni di gestione ora puntano al JSON
+    console.log('📄 Gestione catalogo tramite prodotti.json');
 
     // Search and filters
     const searchInput = safeQuerySelector('#searchInput');
@@ -210,47 +170,43 @@ class CatalogoManager {
     if (importFile) {
       safeAddEventListener(importFile, 'change', (e) => this.importData(e));
     }
-  }
 
-  async loadCategories() {
-    try {
-      const categoriesSnap = await getDocs(collection(db, 'categories'));
-      this.categories = categoriesSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })).filter(category => category.name && category.colorHex);
-
-      // Cache categories
-      setCachedCategories(this.categories);
-
-      this.renderCategoriesList();
-      this.renderCategoryFilters();
-      this.renderProductCategorySelect();
-      this.loadCollapsedState();
-    } catch (error) {
-      console.error('Errore caricamento categorie:', error);
-      this.showError('Errore nel caricamento delle categorie');
-      this.categories = [];
-    }
-  }
-
-  async loadProducts() {
-    try {
-      // Load from Firestore
-      const productsSnap = await getDocs(collection(db, 'products'));
-      this.products = productsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })).filter(product => product.name && product.categoryId)
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      // Cache the results
-      setCachedProducts(this.products);
-
-    } catch (error) {
-      console.error('Errore caricamento prodotti:', error);
-      this.showError('Errore nel caricamento dei prodotti');
-      this.products = [];
+    // Reload button per sviluppo
+    const reloadBtn = document.createElement('button');
+    reloadBtn.className = 'btn btn-secondary';
+    reloadBtn.textContent = '🔄 Ricarica Catalogo';
+    reloadBtn.style.marginLeft = 'var(--spacing-sm)';
+    
+    const exportBtnParent = exportBtn?.parentNode;
+    if (exportBtnParent) {
+      exportBtnParent.insertBefore(reloadBtn, exportBtn.nextSibling);
+      
+      safeAddEventListener(reloadBtn, 'click', async () => {
+        try {
+          reloadBtn.disabled = true;
+          reloadBtn.textContent = '🔄 Ricaricando...';
+          
+          await productsLoader.reload();
+          const { products, categories } = await productsLoader.loadProducts();
+          
+          this.products = products;
+          this.categories = categories;
+          
+          this.renderCategoriesList();
+          this.renderCategoryFilters();
+          this.renderProductCategorySelect();
+          this.filterAndRenderProducts();
+          this.updateStats();
+          
+          showToast('Catalogo ricaricato dal JSON', 'success');
+        } catch (error) {
+          console.error('Errore ricaricamento:', error);
+          showToast(`Errore ricaricamento: ${error.message}`, 'error');
+        } finally {
+          reloadBtn.disabled = false;
+          reloadBtn.textContent = '🔄 Ricarica Catalogo';
+        }
+      });
     }
   }
 
@@ -601,11 +557,13 @@ class CatalogoManager {
           <div class="product-name">
             ${product.name}
             ${product.important ? '<span class="important-badge">Importante</span>' : ''}
-            ${!product.active ? '<span class="important-badge" style="background: var(--accent-warning);">Inattivo</span>' : ''}
+            ${product.active === false ? '<span class="important-badge" style="background: var(--accent-warning);">Inattivo</span>' : ''}
+            ${product.unit ? `<span class="unit-badge">${product.unit}</span>` : ''}
           </div>
           <div class="product-category" style="background-color: ${category.colorHex}20; color: ${category.colorHex}; border: 1px solid ${category.colorHex};">
             ${category.name}
           </div>
+          ${product.notes ? `<div class="product-notes">${product.notes}</div>` : ''}
         </div>
         <div class="product-actions">
           <button class="btn-icon btn-edit" data-product-id="${product.id}">✏️</button>
@@ -703,339 +661,29 @@ class CatalogoManager {
     }
   }
 
-  async addCategory() {
-    const nameInput = safeQuerySelector('#categoryName');
-    const colorInput = safeQuerySelector('#categoryColor');
-
-    if (!nameInput || !colorInput) return;
-
-    const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 50, required: true });
-    if (!nameValidation.valid) {
-      showToast(nameValidation.error, 'error');
-      return;
-    }
-
-    const name = nameValidation.value;
-    const colorHex = colorInput.value;
-
-    // Check for duplicate names
-    if (this.categories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
-      showToast('Esiste già una categoria con questo nome', 'error');
-      return;
-    }
-
-    try {
-      const categoryId = await generateUniqueId('categories', name, db);
-
-      const categoryData = {
-        name,
-        colorHex,
-        createdAt: new Date()
-      };
-
-      await setDoc(doc(db, 'categories', categoryId), categoryData);
-
-      nameInput.value = '';
-      colorInput.value = '#3b82f6';
-
-      await this.loadCategories();
-      this.filterAndRenderProducts();
-
-      showToast('Categoria aggiunta con successo', 'success');
-    } catch (error) {
-      console.error('Errore aggiunta categoria:', error);
-      showToast('Errore durante l\'aggiunta della categoria', 'error');
-    }
+  // Gestione categorie e prodotti ora tramite JSON
+  addCategory() {
+    showToast('Per aggiungere categorie, modifica il file prodotti.json', 'info');
   }
 
   editCategory(categoryId) {
-    const category = this.categories.find(c => c.id === categoryId);
-    if (!category) return;
-
-    const nameInput = safeQuerySelector('#categoryName');
-    const colorInput = safeQuerySelector('#categoryColor');
-    const addBtn = safeQuerySelector('#addCategoryBtn');
-    const updateBtn = safeQuerySelector('#updateCategoryBtn');
-    const cancelBtn = safeQuerySelector('#cancelCategoryBtn');
-
-    if (!nameInput || !colorInput || !addBtn || !updateBtn || !cancelBtn) return;
-
-    nameInput.value = category.name;
-    colorInput.value = category.colorHex;
-
-    addBtn.classList.add('hidden');
-    updateBtn.classList.remove('hidden');
-    cancelBtn.classList.remove('hidden');
-
-    this.editingCategory = categoryId;
+    showToast('Per modificare categorie, modifica il file prodotti.json', 'info');
   }
 
-  async updateCategory() {
-    if (!this.editingCategory) return;
-
-    const nameInput = safeQuerySelector('#categoryName');
-    const colorInput = safeQuerySelector('#categoryColor');
-
-    if (!nameInput || !colorInput) return;
-
-    const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 50, required: true });
-    if (!nameValidation.valid) {
-      showToast(nameValidation.error, 'error');
-      return;
-    }
-
-    const name = nameValidation.value;
-    const colorHex = colorInput.value;
-
-    // Check for duplicate names (excluding current category)
-    if (this.categories.some(cat => cat.id !== this.editingCategory && cat.name.toLowerCase() === name.toLowerCase())) {
-      showToast('Esiste già una categoria con questo nome', 'error');
-      return;
-    }
-
-    try {
-      const categoryData = {
-        name,
-        colorHex,
-        updatedAt: new Date()
-      };
-
-      await updateDoc(doc(db, 'categories', this.editingCategory), categoryData);
-
-      this.cancelCategoryEdit();
-      await this.loadCategories();
-      this.filterAndRenderProducts();
-
-      showToast('Categoria aggiornata con successo', 'success');
-    } catch (error) {
-      console.error('Errore aggiornamento categoria:', error);
-      showToast('Errore durante l\'aggiornamento della categoria', 'error');
-    }
+  deleteCategory(categoryId) {
+    showToast('Per eliminare categorie, modifica il file prodotti.json', 'info');
   }
 
-  cancelCategoryEdit() {
-    const nameInput = safeQuerySelector('#categoryName');
-    const colorInput = safeQuerySelector('#categoryColor');
-    const addBtn = safeQuerySelector('#addCategoryBtn');
-    const updateBtn = safeQuerySelector('#updateCategoryBtn');
-    const cancelBtn = safeQuerySelector('#cancelCategoryBtn');
-
-    if (nameInput) nameInput.value = '';
-    if (colorInput) colorInput.value = '#3b82f6';
-
-    if (addBtn) addBtn.classList.remove('hidden');
-    if (updateBtn) updateBtn.classList.add('hidden');
-    if (cancelBtn) cancelBtn.classList.add('hidden');
-
-    this.editingCategory = null;
-  }
-
-  async deleteCategory(categoryId) {
-    const category = this.categories.find(c => c.id === categoryId);
-    if (!category) return;
-
-    // Check if category has products
-    const hasProducts = this.products.some(p => p.categoryId === categoryId);
-    if (hasProducts) {
-      showToast('Impossibile eliminare: la categoria contiene prodotti', 'error');
-      return;
-    }
-
-    if (!confirm(`Sei sicuro di voler eliminare la categoria "${category.name}"?`)) {
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, 'categories', categoryId));
-
-      await this.loadCategories();
-      this.filterAndRenderProducts();
-
-      showToast('Categoria eliminata con successo', 'success');
-    } catch (error) {
-      console.error('Errore eliminazione categoria:', error);
-      showToast('Errore durante l\'eliminazione della categoria', 'error');
-    }
-  }
-
-  async addProduct() {
-    const nameInput = safeQuerySelector('#productName');
-    const categorySelect = safeQuerySelector('#productCategory');
-    const importantCheck = safeQuerySelector('#productImportant');
-    const activeCheck = safeQuerySelector('#productActive');
-
-    if (!nameInput || !categorySelect || !importantCheck || !activeCheck) return;
-
-    const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 100, required: true });
-    if (!nameValidation.valid) {
-      showToast(nameValidation.error, 'error');
-      return;
-    }
-
-    if (!categorySelect.value) {
-      showToast('Seleziona una categoria', 'error');
-      return;
-    }
-
-    const name = nameValidation.value;
-    const categoryId = categorySelect.value;
-    const important = importantCheck.checked;
-    const active = activeCheck.checked;
-
-    // Check for duplicate names in same category
-    if (this.products.some(p => p.categoryId === categoryId && p.name.toLowerCase() === name.toLowerCase())) {
-      showToast('Esiste già un prodotto con questo nome nella categoria selezionata', 'error');
-      return;
-    }
-
-    try {
-      const productId = await generateUniqueId('products', name, db);
-
-      const productData = {
-        name,
-        categoryId,
-        important,
-        active,
-        createdAt: new Date()
-      };
-
-      await setDoc(doc(db, 'products', productId), productData);
-
-      nameInput.value = '';
-      categorySelect.value = '';
-      importantCheck.checked = false;
-      activeCheck.checked = true;
-
-      await this.loadProducts();
-      this.filterAndRenderProducts();
-
-      showToast('Prodotto aggiunto con successo', 'success');
-    } catch (error) {
-      console.error('Errore aggiunta prodotto:', error);
-      showToast('Errore durante l\'aggiunta del prodotto', 'error');
-    }
+  addProduct() {
+    showToast('Per aggiungere prodotti, modifica il file prodotti.json', 'info');
   }
 
   editProduct(productId) {
-    const product = this.products.find(p => p.id === productId);
-    if (!product) return;
-
-    const nameInput = safeQuerySelector('#productName');
-    const categorySelect = safeQuerySelector('#productCategory');
-    const importantCheck = safeQuerySelector('#productImportant');
-    const activeCheck = safeQuerySelector('#productActive');
-    const addBtn = safeQuerySelector('#addProductBtn');
-    const updateBtn = safeQuerySelector('#updateProductBtn');
-    const cancelBtn = safeQuerySelector('#cancelProductBtn');
-
-    if (!nameInput || !categorySelect || !importantCheck || !activeCheck || !addBtn || !updateBtn || !cancelBtn) return;
-
-    nameInput.value = product.name;
-    categorySelect.value = product.categoryId;
-    importantCheck.checked = product.important || false;
-    activeCheck.checked = product.active !== false;
-
-    addBtn.classList.add('hidden');
-    updateBtn.classList.remove('hidden');
-    cancelBtn.classList.remove('hidden');
-
-    this.editingProduct = productId;
+    showToast('Per modificare prodotti, modifica il file prodotti.json', 'info');
   }
 
-  async updateProduct() {
-    if (!this.editingProduct) return;
-
-    const nameInput = safeQuerySelector('#productName');
-    const categorySelect = safeQuerySelector('#productCategory');
-    const importantCheck = safeQuerySelector('#productImportant');
-    const activeCheck = safeQuerySelector('#productActive');
-
-    if (!nameInput || !categorySelect || !importantCheck || !activeCheck) return;
-
-    const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 100, required: true });
-    if (!nameValidation.valid) {
-      showToast(nameValidation.error, 'error');
-      return;
-    }
-
-    if (!categorySelect.value) {
-      showToast('Seleziona una categoria', 'error');
-      return;
-    }
-
-    const name = nameValidation.value;
-    const categoryId = categorySelect.value;
-    const important = importantCheck.checked;
-    const active = activeCheck.checked;
-
-    // Check for duplicate names in same category (excluding current product)
-    if (this.products.some(p => p.id !== this.editingProduct && p.categoryId === categoryId && p.name.toLowerCase() === name.toLowerCase())) {
-      showToast('Esiste già un prodotto con questo nome nella categoria selezionata', 'error');
-      return;
-    }
-
-    try {
-      const productData = {
-        name,
-        categoryId,
-        important,
-        active,
-        updatedAt: new Date()
-      };
-
-      await updateDoc(doc(db, 'products', this.editingProduct), productData);
-
-      this.cancelProductEdit();
-      await this.loadProducts();
-      this.filterAndRenderProducts();
-
-      showToast('Prodotto aggiornato con successo', 'success');
-    } catch (error) {
-      console.error('Errore aggiornamento prodotto:', error);
-      showToast('Errore durante l\'aggiornamento del prodotto', 'error');
-    }
-  }
-
-  cancelProductEdit() {
-    const nameInput = safeQuerySelector('#productName');
-    const categorySelect = safeQuerySelector('#productCategory');
-    const importantCheck = safeQuerySelector('#productImportant');
-    const activeCheck = safeQuerySelector('#productActive');
-    const addBtn = safeQuerySelector('#addProductBtn');
-    const updateBtn = safeQuerySelector('#updateProductBtn');
-    const cancelBtn = safeQuerySelector('#cancelProductBtn');
-
-    if (nameInput) nameInput.value = '';
-    if (categorySelect) categorySelect.value = '';
-    if (importantCheck) importantCheck.checked = false;
-    if (activeCheck) activeCheck.checked = true;
-
-    if (addBtn) addBtn.classList.remove('hidden');
-    if (updateBtn) updateBtn.classList.add('hidden');
-    if (cancelBtn) cancelBtn.classList.add('hidden');
-
-    this.editingProduct = null;
-  }
-
-  async deleteProduct(productId) {
-    const product = this.products.find(p => p.id === productId);
-    if (!product) return;
-
-    if (!confirm(`Sei sicuro di voler eliminare il prodotto "${product.name}"?`)) {
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, 'products', productId));
-
-      await this.loadProducts();
-      this.filterAndRenderProducts();
-
-      showToast('Prodotto eliminato con successo', 'success');
-    } catch (error) {
-      console.error('Errore eliminazione prodotto:', error);
-      showToast('Errore durante l\'eliminazione del prodotto', 'error');
-    }
+  deleteProduct(productId) {
+    showToast('Per eliminare prodotti, modifica il file prodotti.json', 'info');
   }
 
   exportData() {
@@ -1066,73 +714,8 @@ class CatalogoManager {
     }
   }
 
-  async importData(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-
-      if (!data.categories || !data.products) {
-        showToast('File non valido: mancano categorie o prodotti', 'error');
-        return;
-      }
-
-      if (!confirm('Questo sostituirà tutti i dati esistenti. Continuare?')) {
-        return;
-      }
-
-      // Import categories first
-for (const category of data.categories) {
-  if (category.name && category.colorHex) {
-    const categoryId = await generateUniqueId('categories', category.name, db);
-    const categoryIds = [...new Set(this.filteredProducts.map(p => p.categoryId))];
-
-    await setDoc(doc(db, 'categories', categoryId), {
-      name: category.name,
-      colorHex: category.colorHex,
-      categoryIds: categoryIds,
-      createdAt: new Date()
-    });
-  }
-}
-
-
-      // Reload categories to get new IDs
-      await this.loadCategories();
-
-      // Import products with updated category IDs
-      for (const product of data.products) {
-        if (product.name && product.categoryId) {
-          // Find matching category by name
-          const matchingCategory = this.categories.find(c =>
-            data.categories.find(dc => dc.id === product.categoryId)?.name === c.name
-          );
-
-          if (matchingCategory) {
-            const productId = await generateUniqueId('products', product.name, db);
-            await setDoc(doc(db, 'products', productId), {
-              name: product.name,
-              categoryId: matchingCategory.id,
-              important: product.important || false,
-              active: product.active !== false,
-              createdAt: new Date()
-            });
-          }
-        }
-      }
-
-      await this.loadProducts();
-      this.filterAndRenderProducts();
-
-      showToast('Dati importati con successo', 'success');
-    } catch (error) {
-      console.error('Errore importazione:', error);
-      showToast('Errore durante l\'importazione', 'error');
-    }
-
-    // Reset file input
+  importData(event) {
+    showToast('Per importare dati, sostituisci il file prodotti.json e ricarica la pagina', 'info');
     event.target.value = '';
   }
 

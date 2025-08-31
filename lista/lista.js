@@ -6,11 +6,11 @@ import {
 import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.2.0';
 import { 
   safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, 
-  getCachedProducts, setCachedProducts, getCachedCategories, setCachedCategories, 
   preloadCriticalData, initTheme, initHamburgerMenu, getAdaptiveBatchSize,
   scheduleRender, globalBatchProcessor, smartPrefetcher, VirtualScrollManager,
   initEnhancedIntersectionObserver, createScrollHandler
 } from '../shared/utils.js?v=1.2.0';
+import { productsLoader } from '../shared/products-loader.js?v=1.2.0';
 
 class ListaManager {
   constructor() {
@@ -82,32 +82,16 @@ class ListaManager {
     try {
       this.updateLoadingProgress('Controllo cache locale...');
       
-      // Try to load from cache first
-      const [cachedProducts, cachedCategories] = await Promise.all([
-        getCachedProducts(),
-        getCachedCategories()
-      ]);
+      // Carica prodotti e categorie dal JSON
+      const { products, categories } = await productsLoader.loadProducts();
       
-      // Load categories first (smaller dataset)
-      if (cachedCategories.isValid && cachedCategories.categories.length > 0) {
-        this.categories = cachedCategories.categories;
-        this.renderCategoryFilters();
-        this.loadCollapsedState();
-        this.updateLoadingProgress('Categorie caricate dalla cache');
-      } else {
-        this.updateLoadingProgress('Caricamento categorie...');
-        await this.loadCategories();
-      }
+      this.products = products;
+      this.categories = categories;
       
-      // Load products with progress
-      if (cachedProducts.isValid && cachedProducts.products.length > 0) {
-        this.products = cachedProducts.products;
-        this.updateLoadingProgress(`${this.products.length} prodotti caricati dalla cache`);
-      } else {
-        this.updateLoadingProgress('Caricamento prodotti dal server...');
-        await this.loadProducts();
-        this.updateLoadingProgress(`${this.products.length} prodotti caricati`);
-      }
+      this.renderCategoryFilters();
+      this.loadCollapsedState();
+      
+      this.updateLoadingProgress(`${this.products.length} prodotti caricati dal catalogo`);
       
       const loadTime = performance.now() - startTime;
       console.log(`Dati caricati in ${loadTime.toFixed(2)}ms`);
@@ -215,46 +199,6 @@ class ListaManager {
     const deleteListBtn = safeQuerySelector('#deleteListBtn');
     if (deleteListBtn) {
       safeAddEventListener(deleteListBtn, 'click', () => this.deleteCurrentList());
-    }
-  }
-
-  async loadCategories() {
-    try {
-      const categoriesSnap = await getDocs(collection(db, 'categories'));
-      this.categories = categoriesSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })).filter(category => category.name && category.colorHex);
-      
-      // Cache categories
-      setCachedCategories(this.categories);
-      
-      this.renderCategoryFilters();
-      this.loadCollapsedState();
-    } catch (error) {
-      console.error('Errore caricamento categorie:', error);
-      this.showError('Errore nel caricamento delle categorie');
-      this.categories = [];
-    }
-  }
-
-  async loadProducts() {
-    try {
-      const productsQuery = query(collection(db, 'products'), where('active', '==', true));
-      const productsSnap = await getDocs(productsQuery);
-      this.products = productsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })).filter(product => product.name && product.categoryId)
-        .sort((a, b) => a.name.localeCompare(b.name));
-      
-      // Cache products
-      setCachedProducts(this.products);
-      
-    } catch (error) {
-      console.error('Errore caricamento prodotti:', error);
-      this.showError('Errore nel caricamento dei prodotti');
-      this.products = [];
     }
   }
 
@@ -653,10 +597,12 @@ class ListaManager {
           <div class="product-name">
             ${product.name}
             ${product.important ? '<span class="important-badge">Importante</span>' : ''}
+            ${product.unit ? `<span class="unit-badge">${product.unit}</span>` : ''}
           </div>
           <div class="product-category" style="background-color: ${category.colorHex}20; color: ${category.colorHex}; border: 1px solid ${category.colorHex};">
             ${category.name}
           </div>
+          ${product.notes ? `<div class="product-notes">${product.notes}</div>` : ''}
         </div>
       </div>
       <div class="quantity-controls">

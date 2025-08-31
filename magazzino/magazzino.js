@@ -5,6 +5,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast, getContrastColor } from '../shared/utils.js?v=1.2.0';
 import { safeQuerySelector, safeAddEventListener, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.2.0';
+import { productsLoader } from '../shared/products-loader.js?v=1.2.0';
 
 class MagazzinoManager {
   constructor() {
@@ -34,10 +35,10 @@ class MagazzinoManager {
   
   async loadData() {
     try {
-      await Promise.all([
-        this.loadCategories(),
-        this.loadProducts()
-      ]);
+      // Carica prodotti e categorie dal JSON
+      const { products, categories } = await productsLoader.loadProducts();
+      this.products = products;
+      this.categories = categories;
     } catch (error) {
       console.error('Errore caricamento dati:', error);
       this.showError('Errore nel caricamento dei dati');
@@ -65,34 +66,6 @@ class MagazzinoManager {
     const markAllReadBtn = safeQuerySelector('#markAllReadBtn');
     if (markAllReadBtn) {
       safeAddEventListener(markAllReadBtn, 'click', () => this.markAllNotificationsRead());
-    }
-  }
-
-  async loadCategories() {
-    try {
-      const categoriesSnap = await getDocs(collection(db, 'categories'));
-      this.categories = categoriesSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })).filter(category => category.name && category.colorHex);
-    } catch (error) {
-      console.error('Errore caricamento categorie:', error);
-      this.categories = [];
-    }
-  }
-
-  async loadProducts() {
-    try {
-      const productsQuery = query(collection(db, 'products'), where('active', '==', true));
-      const productsSnap = await getDocs(productsQuery);
-      this.products = productsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })).filter(product => product.name && product.categoryId)
-        .sort((a, b) => a.name.localeCompare(b.name));
-    } catch (error) {
-      console.error('Errore caricamento prodotti:', error);
-      this.products = [];
     }
   }
 
@@ -391,9 +364,11 @@ class MagazzinoManager {
           <div style="font-weight: 600; margin-bottom: 0.25rem; ${product.checked ? 'text-decoration: line-through; opacity: 0.7;' : ''}">
             ${product.name}
             ${product.important ? '<span class="important-badge">Importante</span>' : ''}
+            ${product.unit ? `<span class="unit-badge">${product.unit}</span>` : ''}
           </div>
           <div style="font-size: 0.875rem; color: var(--text-secondary);">
             Quantità: ${product.quantity}
+            ${product.notes ? `<br>Note: ${product.notes}` : ''}
           </div>
         </div>
         <label style="display: flex; align-items: center; cursor: pointer;">
