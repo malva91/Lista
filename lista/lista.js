@@ -395,18 +395,8 @@ class ListaManager {
     loading.classList.add('hidden');
     container.classList.remove('hidden');
     
-    // Clear container for fresh render
-    container.innerHTML = '';
-    
-    // Filter products if not already done
-    if (this.filteredProducts.length === 0) {
-      this.resetPagination();
-      this.filterAndRenderProducts();
-      return;
-    }
-    
-    // Load first batch
-    await this.loadMoreProducts();
+    // Apply filters and render all products
+    this.filterAndRenderProducts();
   }
   
   async renderProductsBatch(products, isFirstBatch = false) {

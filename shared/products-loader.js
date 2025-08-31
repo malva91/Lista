@@ -82,7 +82,9 @@ class ProductsLoader {
       console.log(`📋 Prodotti per categoria:`);
       this.categories.forEach(cat => {
         const count = this.products.filter(p => p.categoryId === cat.id).length;
-        console.log(`  📂 ${cat.name}: ${count} prodotti`);
+        if (count > 0) {
+          console.log(`  📂 ${cat.name}: ${count} prodotti`);
+        }
       });
 
       // Crea indici per performance
