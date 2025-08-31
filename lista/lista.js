@@ -100,8 +100,7 @@ class ListaManager {
       smartPrefetcher.trackInteraction('load_performance', {
         loadTime,
         productsCount: this.products.length,
-        categoriesCount: this.categories.length,
-        fromCache: cachedProducts.isValid
+        categoriesCount: this.categories.length
       });
       
     } catch (error) {
@@ -251,8 +250,8 @@ class ListaManager {
     // Clear container for fresh render
     container.innerHTML = '';
     
-    // Load first batch
-    this.loadMoreProducts();
+    // Render all products at once for better UX in lista
+    this.renderAllProducts();
   }
   
   async loadMoreProducts() {
