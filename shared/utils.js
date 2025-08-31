@@ -1,15 +1,5 @@
 // Utility functions for the product management system
-// Version: 1.2.0
-
-// Performance monitoring
-let performanceMetrics = {
-  loadTimes: [],
-  renderTimes: [],
-  interactionTimes: []
-};
-
-// Cache management
-const CACHE_VERSION = '1.2.0';
+// Version: 1.3.0 - Simplified
 
 // Mobile detection
 export function isMobile() {
@@ -18,10 +8,6 @@ export function isMobile() {
 
 export function isIOS() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent);
-}
-
-export function isAndroid() {
-  return /Android/.test(navigator.userAgent);
 }
 
 // Safe DOM utilities
@@ -187,17 +173,15 @@ export function showToast(message, type = 'info', duration = 3000) {
 }
 
 // Debounce utility
-export function debounce(func, wait, immediate = false) {
+export function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
     const later = () => {
       timeout = null;
-      if (!immediate) func.apply(this, args);
+      func.apply(this, args);
     };
-    const callNow = immediate && !timeout;
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
-    if (callNow) func.apply(this, args);
   };
 }
 
@@ -208,38 +192,6 @@ export function getContrastColor(hexColor) {
   const b = parseInt(hexColor.slice(5, 7), 16);
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
   return brightness > 128 ? '#000000' : '#ffffff';
-}
-
-// Generate unique ID for Firestore documents
-export async function generateUniqueId(collectionName, baseName, db) {
-  const { collection, doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-  
-  const sanitized = baseName.toLowerCase()
-    .replace(/[^a-z0-9]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  
-  let id = sanitized;
-  let counter = 1;
-  
-  while (true) {
-    const docRef = doc(db, collectionName, id);
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) {
-      return id;
-    }
-    
-    id = `${sanitized}-${counter}`;
-    counter++;
-    
-    if (counter > 100) {
-      id = `${sanitized}-${Date.now()}`;
-      break;
-    }
-  }
-  
-  return id;
 }
 
 // Mobile utilities
@@ -254,31 +206,15 @@ export function initMobileUtils() {
   window.addEventListener('resize', debounce(setVH, 100));
   window.addEventListener('orientationchange', debounce(setVH, 100));
   
-  // Handle keyboard on mobile
-  if (isMobile()) {
-    let initialViewportHeight = window.innerHeight;
-    
-    function handleViewportChange() {
-      const currentHeight = window.innerHeight;
-      const keyboardHeight = Math.max(0, initialViewportHeight - currentHeight);
-      document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
-    }
-    
-    window.addEventListener('resize', debounce(handleViewportChange, 100));
-    
-    // Prevent zoom on input focus for iOS
-    if (isIOS()) {
-      const inputs = document.querySelectorAll('input, select, textarea');
-      inputs.forEach(input => {
-        if (input.style.fontSize !== '16px') {
-          input.style.fontSize = '16px';
-        }
-      });
-    }
+  // Prevent zoom on input focus for iOS
+  if (isIOS()) {
+    const inputs = document.querySelectorAll('input, select, textarea');
+    inputs.forEach(input => {
+      if (input.style.fontSize !== '16px') {
+        input.style.fontSize = '16px';
+      }
+    });
   }
-  
-  // Add touch feedback
-  document.addEventListener('touchstart', function() {}, { passive: true });
   
   // Prevent pull-to-refresh on mobile
   document.body.style.overscrollBehavior = 'contain';
@@ -313,14 +249,6 @@ export function initTheme() {
     
     document.body.appendChild(toggle);
   }
-  
-  // Listen for system theme changes
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    if (!localStorage.getItem('theme')) {
-      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-      toggle.innerHTML = e.matches ? '☀️' : '🌙';
-    }
-  });
 }
 
 // Hamburger menu
@@ -373,310 +301,4 @@ export function initHamburgerMenu() {
       dropdown.classList.remove('show');
     }
   });
-}
-
-// Performance optimization utilities
-export function getAdaptiveBatchSize() {
-  const screenHeight = window.innerHeight;
-  const isMobileDevice = isMobile();
-  
-  if (isMobileDevice) {
-    return screenHeight < 600 ? 10 : 15;
-  }
-  
-  return screenHeight < 800 ? 20 : 30;
-}
-
-export function scheduleRender(callback) {
-  return new Promise(resolve => {
-    requestAnimationFrame(() => {
-      callback();
-      resolve();
-    });
-  });
-}
-
-// Global batch processor for DOM operations
-export const globalBatchProcessor = {
-  queue: [],
-  isProcessing: false,
-  
-  add(operation) {
-    this.queue.push(operation);
-    if (!this.isProcessing) {
-      this.process();
-    }
-  },
-  
-  async process() {
-    this.isProcessing = true;
-    
-    while (this.queue.length > 0) {
-      const batch = this.queue.splice(0, 5); // Process 5 operations at a time
-      
-      await new Promise(resolve => {
-        requestAnimationFrame(() => {
-          batch.forEach(operation => {
-            try {
-              operation();
-            } catch (error) {
-              console.warn('Batch operation failed:', error);
-            }
-          });
-          resolve();
-        });
-      });
-      
-      // Small delay to prevent blocking
-      if (this.queue.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1));
-      }
-    }
-    
-    this.isProcessing = false;
-  }
-};
-
-// Smart prefetcher for predictive loading
-export const smartPrefetcher = {
-  interactions: new Map(),
-  patterns: new Map(),
-  
-  trackInteraction(type, data) {
-    const key = `${type}_${JSON.stringify(data)}`;
-    const count = this.interactions.get(key) || 0;
-    this.interactions.set(key, count + 1);
-    
-    // Update patterns
-    this.updatePatterns(type, data);
-  },
-  
-  updatePatterns(type, data) {
-    if (!this.patterns.has(type)) {
-      this.patterns.set(type, new Map());
-    }
-    
-    const typePatterns = this.patterns.get(type);
-    const pattern = JSON.stringify(data);
-    const count = typePatterns.get(pattern) || 0;
-    typePatterns.set(pattern, count + 1);
-  },
-  
-  shouldPrefetch(type, data) {
-    const key = `${type}_${JSON.stringify(data)}`;
-    const count = this.interactions.get(key) || 0;
-    return count > 2; // Prefetch if used more than twice
-  }
-};
-
-// Virtual scroll manager for large lists
-export class VirtualScrollManager {
-  constructor(container, itemHeight, renderItem) {
-    this.container = container;
-    this.itemHeight = itemHeight;
-    this.renderItem = renderItem;
-    this.items = [];
-    this.visibleStart = 0;
-    this.visibleEnd = 0;
-    this.scrollTop = 0;
-    this.containerHeight = 0;
-    
-    this.init();
-  }
-  
-  init() {
-    this.container.style.position = 'relative';
-    this.container.style.overflow = 'auto';
-    
-    this.container.addEventListener('scroll', debounce(() => {
-      this.handleScroll();
-    }, 16), { passive: true });
-    
-    this.updateContainerHeight();
-    window.addEventListener('resize', debounce(() => {
-      this.updateContainerHeight();
-    }, 100));
-  }
-  
-  updateContainerHeight() {
-    this.containerHeight = this.container.clientHeight;
-    this.calculateVisibleRange();
-    this.render();
-  }
-  
-  setItems(items) {
-    this.items = items;
-    this.calculateVisibleRange();
-    this.render();
-  }
-  
-  handleScroll() {
-    this.scrollTop = this.container.scrollTop;
-    this.calculateVisibleRange();
-    this.render();
-  }
-  
-  calculateVisibleRange() {
-    const buffer = 5; // Render extra items for smooth scrolling
-    this.visibleStart = Math.max(0, Math.floor(this.scrollTop / this.itemHeight) - buffer);
-    this.visibleEnd = Math.min(
-      this.items.length,
-      Math.ceil((this.scrollTop + this.containerHeight) / this.itemHeight) + buffer
-    );
-  }
-  
-  render() {
-    const totalHeight = this.items.length * this.itemHeight;
-    const offsetY = this.visibleStart * this.itemHeight;
-    
-    this.container.innerHTML = `
-      <div style="height: ${totalHeight}px; position: relative;">
-        <div style="transform: translateY(${offsetY}px);">
-          ${this.items.slice(this.visibleStart, this.visibleEnd)
-            .map((item, index) => this.renderItem(item, this.visibleStart + index))
-            .join('')}
-        </div>
-      </div>
-    `;
-  }
-}
-
-// Enhanced intersection observer for better performance
-export function initEnhancedIntersectionObserver() {
-  const options = {
-    root: null,
-    rootMargin: '50px',
-    threshold: [0, 0.1, 0.5, 1]
-  };
-  
-  return new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        // Element is visible, can trigger loading
-        const element = entry.target;
-        if (element.dataset.lazyLoad) {
-          // Trigger lazy loading
-          const event = new CustomEvent('lazyLoad', { detail: { element } });
-          element.dispatchEvent(event);
-        }
-      }
-    });
-  }, options);
-}
-
-// Optimized scroll handler
-export function createScrollHandler(callback, threshold = 100) {
-  let ticking = false;
-  let lastScrollY = 0;
-  
-  return function(event) {
-    const scrollY = event.target.scrollTop || window.pageYOffset;
-    const scrollDirection = scrollY > lastScrollY ? 'down' : 'up';
-    const scrollDelta = Math.abs(scrollY - lastScrollY);
-    
-    if (!ticking && scrollDelta > threshold) {
-      requestAnimationFrame(() => {
-        callback({
-          scrollY,
-          scrollDirection,
-          scrollDelta,
-          target: event.target
-        });
-        ticking = false;
-      });
-      ticking = true;
-    }
-    
-    lastScrollY = scrollY;
-  };
-}
-
-// Preload critical data
-export function preloadCriticalData() {
-  // Preload Firebase modules
-  const firebaseModules = [
-    'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
-  ];
-  
-  firebaseModules.forEach(url => {
-    const link = document.createElement('link');
-    link.rel = 'modulepreload';
-    link.href = url;
-    document.head.appendChild(link);
-  });
-  
-  // Preload products JSON
-  const jsonPreload = document.createElement('link');
-  jsonPreload.rel = 'prefetch';
-  jsonPreload.href = '/prodotti.json?v=1.2.0';
-  document.head.appendChild(jsonPreload);
-  
-  // Warm up IndexedDB
-  if ('indexedDB' in window) {
-    try {
-      const request = indexedDB.open('app_cache', 1);
-      request.onerror = () => console.warn('IndexedDB not available');
-    } catch (error) {
-      console.warn('IndexedDB initialization failed:', error);
-    }
-  }
-}
-
-// Performance monitoring
-export function trackPerformance(metric, value) {
-  if (!performanceMetrics[metric]) {
-    performanceMetrics[metric] = [];
-  }
-  
-  performanceMetrics[metric].push({
-    value,
-    timestamp: Date.now()
-  });
-  
-  // Keep only last 100 entries
-  if (performanceMetrics[metric].length > 100) {
-    performanceMetrics[metric] = performanceMetrics[metric].slice(-100);
-  }
-}
-
-export function getPerformanceMetrics() {
-  return { ...performanceMetrics };
-}
-
-// Error boundary for better error handling
-export function createErrorBoundary(element, fallbackContent = 'Si è verificato un errore') {
-  const originalContent = element.innerHTML;
-  
-  window.addEventListener('error', (event) => {
-    if (element.contains(event.target)) {
-      console.error('Error in component:', event.error);
-      element.innerHTML = `
-        <div class="error-boundary">
-          <p>${fallbackContent}</p>
-          <button onclick="this.parentElement.parentElement.innerHTML = '${originalContent.replace(/'/g, "\\'")}'; location.reload();">
-            Riprova
-          </button>
-        </div>
-      `;
-    }
-  });
-}
-
-// Initialize all utilities
-export function initializeApp() {
-  initMobileUtils();
-  initTheme();
-  initHamburgerMenu();
-  preloadCriticalData();
-  
-  // Track app initialization performance
-  trackPerformance('appInit', performance.now());
-  
-  console.log('App utilities initialized');
-}
-
-// Auto-initialize if not in module context
-if (typeof window !== 'undefined' && !window.APP_UTILS_INITIALIZED) {
-  window.APP_UTILS_INITIALIZED = true;
-  document.addEventListener('DOMContentLoaded', initializeApp);
 }

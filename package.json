@@ -1,6 +1,6 @@
 {
   "name": "gestione-liste-prodotti",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Sistema di gestione liste prodotti per dipendenti e magazzino",
   "type": "module",
   "scripts": {

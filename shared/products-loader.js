@@ -1,7 +1,10 @@
 /**
- * Product Loader - Gestisce il caricamento dei prodotti dal JSON
- * Version: 1.2.0
+ * Product Loader - Gestisce il caricamento dei prodotti dal JSON e Firestore
+ * Version: 1.3.0 - Simplified
  */
+
+import { db } from './firebase.js?v=1.3.0';
+import { collection, getDocs, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 class ProductsLoader {
   constructor() {
@@ -9,7 +12,7 @@ class ProductsLoader {
     this.categories = [];
     this.isLoaded = false;
     this.loadPromise = null;
-    this.cache = new Map();
+    this.useFirestore = false; // Flag per usare Firestore invece del JSON
   }
 
   async loadProducts() {
@@ -27,74 +30,31 @@ class ProductsLoader {
     }
 
     try {
-      console.log('🔄 Caricamento prodotti dal JSON...');
+      console.log('🔄 Caricamento prodotti...');
       const startTime = performance.now();
 
-      const response = await fetch('/prodotti.json?v=1.2.0');
+      // Prima prova a caricare da Firestore
+      const firestoreData = await this.loadFromFirestore();
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (firestoreData.hasData) {
+        console.log('📊 Dati caricati da Firestore');
+        this.products = firestoreData.products;
+        this.categories = firestoreData.categories;
+        this.useFirestore = true;
+      } else {
+        // Fallback al JSON statico
+        console.log('📄 Caricamento da JSON statico...');
+        const jsonData = await this.loadFromJSON();
+        this.products = jsonData.products;
+        this.categories = jsonData.categories;
+        this.useFirestore = false;
       }
-
-      const data = await response.json();
-      
-      // Validazione JSON
-      this.validateProductsData(data);
-      
-      // Processa categorie
-      this.categories = (data.categories || [])
-        .filter(cat => cat.id && cat.name && cat.colorHex)
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
-      
-      // Processa prodotti
-      const allProducts = (data.products || [])
-        .filter(prod => prod.id && prod.name && prod.categoryId);
-      
-      console.log(`📊 Prodotti totali nel JSON: ${allProducts.length}`);
-      
-      // Filtra solo prodotti attivi (active === true o active non definito)
-      this.products = allProducts
-        .filter(prod => {
-          // Se active non è definito, considera il prodotto attivo
-          // Se active è definito, deve essere true
-          const isActive = prod.active === undefined || prod.active === true;
-          if (!isActive) {
-            console.log(`❌ Prodotto inattivo escluso: ${prod.name} (active: ${prod.active})`);
-          }
-          return isActive;
-        })
-        .sort((a, b) => {
-          // Prima per categoria, poi per priorità, poi per nome
-          const catA = this.categories.find(c => c.id === a.categoryId);
-          const catB = this.categories.find(c => c.id === b.categoryId);
-          
-          if (catA && catB && catA.order !== catB.order) {
-            return catA.order - catB.order;
-          }
-          
-          if (a.priority !== b.priority) {
-            return (a.priority || 999) - (b.priority || 999);
-          }
-          
-          return a.name.localeCompare(b.name);
-        });
-
-      console.log(`📋 Prodotti per categoria:`);
-      this.categories.forEach(cat => {
-        const count = this.products.filter(p => p.categoryId === cat.id).length;
-        if (count > 0) {
-          console.log(`  📂 ${cat.name}: ${count} prodotti`);
-        }
-      });
-
-      // Crea indici per performance
-      this.createIndices();
       
       this.isLoaded = true;
       
       const loadTime = performance.now() - startTime;
       console.log(`✅ Prodotti caricati in ${loadTime.toFixed(2)}ms`);
-      console.log(`📊 ${this.products.length} prodotti attivi su ${allProducts.length} totali, ${this.categories.length} categorie`);
+      console.log(`📊 ${this.products.length} prodotti, ${this.categories.length} categorie`);
       
       return { products: this.products, categories: this.categories };
       
@@ -104,6 +64,63 @@ class ProductsLoader {
       this.loadPromise = null;
       throw new Error(`Impossibile caricare il catalogo prodotti: ${error.message}`);
     }
+  }
+
+  async loadFromFirestore() {
+    try {
+      const [categoriesSnap, productsSnap] = await Promise.all([
+        getDocs(collection(db, 'prodottiCatalogo', 'data', 'categories')),
+        getDocs(collection(db, 'prodottiCatalogo', 'data', 'products'))
+      ]);
+
+      if (categoriesSnap.empty && productsSnap.empty) {
+        return { hasData: false };
+      }
+
+      const categories = categoriesSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      const products = productsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      return {
+        hasData: true,
+        categories: categories.filter(cat => cat.active !== false),
+        products: products.filter(prod => prod.active !== false)
+      };
+    } catch (error) {
+      console.warn('Firestore non disponibile, uso JSON:', error);
+      return { hasData: false };
+    }
+  }
+
+  async loadFromJSON() {
+    const response = await fetch('/prodotti.json?v=1.3.0');
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    // Validazione JSON
+    this.validateProductsData(data);
+    
+    // Processa categorie
+    const categories = (data.categories || [])
+      .filter(cat => cat.id && cat.name && cat.colorHex)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    // Processa prodotti (solo attivi)
+    const products = (data.products || [])
+      .filter(prod => prod.id && prod.name && prod.categoryId && prod.active !== false)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return { products, categories };
   }
 
   validateProductsData(data) {
@@ -161,36 +178,7 @@ class ProductsLoader {
     console.log(`✅ JSON validato: ${data.categories.length} categorie, ${data.products.length} prodotti`);
   }
 
-  createIndices() {
-    // Indice prodotti per categoria
-    this.cache.set('productsByCategory', new Map());
-    const productsByCategory = this.cache.get('productsByCategory');
-    
-    this.products.forEach(product => {
-      if (!productsByCategory.has(product.categoryId)) {
-        productsByCategory.set(product.categoryId, []);
-      }
-      productsByCategory.get(product.categoryId).push(product);
-    });
-
-    // Indice prodotti per ID
-    this.cache.set('productsById', new Map());
-    const productsById = this.cache.get('productsById');
-    
-    this.products.forEach(product => {
-      productsById.set(product.id, product);
-    });
-
-    // Indice categorie per ID
-    this.cache.set('categoriesById', new Map());
-    const categoriesById = this.cache.get('categoriesById');
-    
-    this.categories.forEach(category => {
-      categoriesById.set(category.id, category);
-    });
-  }
-
-  // Metodi di accesso ottimizzati
+  // Metodi di accesso
   getProducts() {
     return this.products;
   }
@@ -200,62 +188,69 @@ class ProductsLoader {
   }
 
   getProductById(id) {
-    const productsById = this.cache.get('productsById');
-    return productsById ? productsById.get(id) : this.products.find(p => p.id === id);
+    return this.products.find(p => p.id === id);
   }
 
   getCategoryById(id) {
-    const categoriesById = this.cache.get('categoriesById');
-    return categoriesById ? categoriesById.get(id) : this.categories.find(c => c.id === id);
+    return this.categories.find(c => c.id === id);
   }
 
   getProductsByCategory(categoryId) {
-    const productsByCategory = this.cache.get('productsByCategory');
-    return productsByCategory ? productsByCategory.get(categoryId) || [] : 
-           this.products.filter(p => p.categoryId === categoryId);
+    return this.products.filter(p => p.categoryId === categoryId);
   }
 
-  searchProducts(searchTerm) {
-    if (!searchTerm) return this.products;
-    
-    const term = searchTerm.toLowerCase();
-    return this.products.filter(product => 
-      product.name.toLowerCase().includes(term) ||
-      (product.notes && product.notes.toLowerCase().includes(term))
-    );
-  }
-
-  filterProducts(filters = {}) {
-    let filtered = this.products;
-
-    if (filters.categoryId) {
-      filtered = filtered.filter(p => p.categoryId === filters.categoryId);
-    }
-
-    if (filters.important !== undefined) {
-      filtered = filtered.filter(p => p.important === filters.important);
-    }
-
-    if (filters.active !== undefined) {
-      filtered = filtered.filter(p => p.active === filters.active);
-    }
-
-    if (filters.search) {
-      const term = filters.search.toLowerCase();
-      filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(term) ||
-        (p.notes && p.notes.toLowerCase().includes(term))
+  // Metodi per salvare su Firestore
+  async saveToFirestore(categories, products) {
+    try {
+      // Salva categorie
+      const categoryPromises = categories.map(category => 
+        setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', category.id), category)
       );
-    }
 
-    return filtered;
+      // Salva prodotti
+      const productPromises = products.map(product => 
+        setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', product.id), product)
+      );
+
+      await Promise.all([...categoryPromises, ...productPromises]);
+      
+      // Aggiorna cache locale
+      this.categories = categories;
+      this.products = products;
+      this.useFirestore = true;
+      
+      console.log('✅ Dati salvati su Firestore');
+      return true;
+    } catch (error) {
+      console.error('❌ Errore salvataggio Firestore:', error);
+      throw error;
+    }
   }
 
-  // Metodo per ricaricare i prodotti (utile per sviluppo)
+  async deleteFromFirestore(type, id) {
+    try {
+      const collectionName = type === 'category' ? 'categories' : 'products';
+      await deleteDoc(doc(db, 'prodottiCatalogo', 'data', collectionName, id));
+      
+      // Aggiorna cache locale
+      if (type === 'category') {
+        this.categories = this.categories.filter(c => c.id !== id);
+      } else {
+        this.products = this.products.filter(p => p.id !== id);
+      }
+      
+      console.log(`✅ ${type} ${id} eliminato da Firestore`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Errore eliminazione ${type}:`, error);
+      throw error;
+    }
+  }
+
+  // Metodo per ricaricare i prodotti
   async reload() {
     this.isLoaded = false;
     this.loadPromise = null;
-    this.cache.clear();
     return this.loadProducts();
   }
 
@@ -264,27 +259,12 @@ class ProductsLoader {
     return {
       totalProducts: this.products.length,
       totalCategories: this.categories.length,
-      visibleCategories: this.getVisibleCategories().length,
       activeProducts: this.products.filter(p => p.active !== false).length,
-      importantProducts: this.products.filter(p => p.important).length,
       productsByCategory: this.categories.map(cat => ({
         category: cat.name,
         count: this.getProductsByCategory(cat.id).length
       }))
     };
-  }
-
-  // Ottieni solo le categorie che hanno prodotti attivi
-  getVisibleCategories() {
-    return this.categories.filter(category => {
-      const productsInCategory = this.products.filter(p => p.categoryId === category.id);
-      return productsInCategory.length > 0;
-    });
-  }
-
-  // Ottieni tutte le categorie (anche quelle senza prodotti)
-  getAllCategories() {
-    return this.categories.sort((a, b) => (a.order || 0) - (b.order || 0));
   }
 
   // Ottieni categorie con conteggio prodotti
@@ -298,19 +278,17 @@ class ProductsLoader {
       };
     }).sort((a, b) => (a.order || 0) - (b.order || 0));
   }
+
+  // Esporta dati per JSON
+  exportToJSON() {
+    return {
+      version: "1.3.0",
+      lastUpdated: new Date().toISOString(),
+      categories: this.categories,
+      products: this.products
+    };
+  }
 }
 
 // Singleton instance
 export const productsLoader = new ProductsLoader();
-
-// Utility per compatibilità con il codice esistente
-export async function loadProductsFromJSON() {
-  return productsLoader.loadProducts();
-}
-
-export function getProductsFromCache() {
-  return {
-    products: productsLoader.getProducts(),
-    categories: productsLoader.getCategories()
-  };
-}

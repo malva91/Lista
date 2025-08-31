@@ -1,507 +1,481 @@
 {
+  "version": "1.3.0",
+  "lastUpdated": "2025-01-27T12:00:00.000Z",
   "categories": [
     {
       "id": "aperitivo",
       "name": "APERITIVO",
-      "colorHex": "#f8afaf"
+      "colorHex": "#f8afaf",
+      "order": 1,
+      "active": true
     },
     {
       "id": "bibite",
+      "name": "BIBITE",
       "colorHex": "#96a3e3",
-      "name": "BIBITE"
+      "order": 2,
+      "active": true
     },
     {
       "id": "bibite-varie",
+      "name": "BIBITE Varie",
       "colorHex": "#26a1e8",
-      "name": "BIBITE Varie"
+      "order": 3,
+      "active": true
     },
     {
       "id": "birre",
+      "name": "BIRRE",
       "colorHex": "#a0a739",
-      "name": "BIRRE"
+      "order": 4,
+      "active": true
     },
     {
       "id": "caffetteria",
+      "name": "CAFFETTERIA",
       "colorHex": "#d39936",
-      "name": "CAFFETTERIA"
+      "order": 5,
+      "active": true
     },
     {
       "id": "cencini",
+      "name": "CENCINI",
       "colorHex": "#e5daf0",
-      "name": "CENCINI"
+      "order": 6,
+      "active": true
     },
     {
       "id": "congelato",
       "name": "CONGELATO",
-      "colorHex": "#c3f2fe"
+      "colorHex": "#c3f2fe",
+      "order": 7,
+      "active": true
     },
     {
       "id": "consumabili",
+      "name": "CONSUMABILI",
       "colorHex": "#9fc33c",
-      "updatedAt": {
-        "seconds": 1756039036,
-        "nanoseconds": 72000000
-      },
-      "name": "CONSUMABILI"
+      "order": 8,
+      "active": true
     },
     {
       "id": "cucina",
       "name": "CUCINA",
-      "colorHex": "#e0a9f9"
+      "colorHex": "#e0a9f9",
+      "order": 9,
+      "active": true
     },
     {
       "id": "freschi",
+      "name": "FRESCHI",
       "colorHex": "#a5e4cf",
-      "name": "FRESCHI"
+      "order": 10,
+      "active": true
     },
     {
       "id": "frutta",
+      "name": "FRUTTA",
       "colorHex": "#64ce87",
-      "name": "FRUTTA"
+      "order": 11,
+      "active": true
     },
     {
       "id": "latte",
       "name": "LATTE",
       "colorHex": "#cbc8c8",
-      "updatedAt": {
-        "seconds": 1756039054,
-        "nanoseconds": 306000000
-      }
+      "order": 12,
+      "active": true
     },
     {
       "id": "pane",
       "name": "PANE",
-      "colorHex": "#d6bf80"
+      "colorHex": "#d6bf80",
+      "order": 13,
+      "active": true
     },
     {
       "id": "patatine",
       "name": "PATATINE",
-      "colorHex": "#f0daea"
+      "colorHex": "#f0daea",
+      "order": 14,
+      "active": true
     },
     {
       "id": "pulizia",
+      "name": "PULIZIA",
       "colorHex": "#fea9c8",
-      "name": "PULIZIA"
+      "order": 15,
+      "active": true
     },
     {
       "id": "sacchi",
       "name": "SACCHI",
-      "colorHex": "#919191"
+      "colorHex": "#919191",
+      "order": 16,
+      "active": true
     },
     {
       "id": "succhi",
+      "name": "SUCCHI",
       "colorHex": "#aae0e4",
-      "name": "SUCCHI"
+      "order": 17,
+      "active": true
     },
     {
       "id": "tanica",
+      "name": "TANICA",
       "colorHex": "#d279b2",
-      "name": "TANICA"
+      "order": 18,
+      "active": true
     },
     {
       "id": "tovaglioli",
+      "name": "TOVAGLIOLI",
       "colorHex": "#daf0e0",
-      "name": "TOVAGLIOLI"
+      "order": 19,
+      "active": true
     },
     {
       "id": "verdura",
+      "name": "VERDURA",
       "colorHex": "#49a300",
-      "updatedAt": {
-        "seconds": 1756039072,
-        "nanoseconds": 33000000
-      },
-      "name": "VERDURA"
+      "order": 20,
+      "active": true
     }
   ],
   "products": [
     {
       "id": "ace",
-      "active": true,
+      "name": "A.C.E.",
       "categoryId": "succhi",
-      "important": false,
-      "name": "A.C.E."
+      "active": true
     },
     {
       "id": "acqua-gr-frizzante",
-      "active": true,
       "name": "ACQUA GR. FRIZZANTE",
       "categoryId": "bibite",
-      "important": false
+      "active": true
     },
     {
       "id": "acqua-gr-naturale",
       "name": "ACQUA GR. NATURALE",
-      "active": true,
       "categoryId": "bibite",
-      "important": false
+      "active": true
     },
     {
       "id": "acqua-picc-frizzante",
-      "important": false,
-      "categoryId": "bibite",
       "name": "ACQUA PICC. FRIZZANTE",
+      "categoryId": "bibite",
       "active": true
     },
     {
       "id": "acqua-picc-naturale",
       "name": "ACQUA PICC. NATURALE",
-      "active": true,
       "categoryId": "bibite",
-      "important": false
+      "active": true
     },
     {
       "id": "ajax",
-      "active": true,
-      "important": false,
       "name": "AJAX",
-      "categoryId": "pulizia"
+      "categoryId": "pulizia",
+      "active": true
     },
     {
       "id": "ananas",
       "name": "ANANAS",
-      "active": true,
       "categoryId": "succhi",
-      "important": false
+      "active": true
     },
     {
       "id": "anguria",
       "name": "Anguria",
-      "active": true,
       "categoryId": "tanica",
-      "important": false
+      "active": true
     },
     {
       "id": "aperol",
-      "categoryId": "aperitivo",
       "name": "APEROL",
-      "important": false,
+      "categoryId": "aperitivo",
       "active": true
     },
     {
       "id": "arancia",
-      "active": true,
-      "important": false,
+      "name": "ARANCIA",
       "categoryId": "succhi",
-      "name": "ARANCIA"
+      "active": true
     },
     {
-      "id": "arancia-2",
-      "active": true,
+      "id": "arancia-frutta",
       "name": "ARANCIA",
       "categoryId": "frutta",
-      "important": false
+      "active": true
     },
     {
       "id": "banana",
-      "categoryId": "frutta",
       "name": "BANANA",
-      "important": false,
+      "categoryId": "frutta",
       "active": true
     },
     {
       "id": "bicchieri-acqua",
-      "important": false,
       "name": "BICCHIERI ACQUA",
       "categoryId": "consumabili",
       "active": true
     },
     {
       "id": "bicchieri-caffe",
-      "important": false,
-      "active": true,
       "name": "BICCHIERI CAFFE",
-      "categoryId": "consumabili"
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "bicchieri-cappuccino",
-      "categoryId": "consumabili",
-      "active": true,
       "name": "BICCHIERI CAPPUCCINO",
-      "important": false
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "bicchieri-grandi",
       "name": "BICCHIERI GRANDI",
       "categoryId": "consumabili",
-      "active": true,
-      "important": false
+      "active": true
     },
     {
       "id": "bicchieri-piccoli",
-      "active": true,
-      "important": false,
+      "name": "BICCHIERI PICCOLI",
       "categoryId": "consumabili",
-      "name": "BICCHIERI PICCOLI"
+      "active": true
     },
     {
       "id": "birra-no-alcol",
-      "important": false,
-      "active": true,
       "name": "BIRRA NO ALCOL",
-      "categoryId": "birre"
+      "categoryId": "birre",
+      "active": true
     },
     {
       "id": "block-notes",
       "name": "BLOCK NOTES",
-      "active": true,
       "categoryId": "consumabili",
-      "important": false
+      "active": true
     },
     {
       "id": "blue",
-      "active": true,
-      "important": false,
+      "name": "BLUE",
       "categoryId": "cencini",
-      "name": "BLUE"
+      "active": true
     },
     {
       "id": "bustine-grandi",
-      "important": false,
-      "active": true,
+      "name": "BUSTINE GRANDI",
       "categoryId": "consumabili",
-      "name": "BUSTINE GRANDI"
+      "active": true
     },
     {
       "id": "bustine-medie",
-      "active": true,
+      "name": "BUSTINE MEDIE",
       "categoryId": "consumabili",
-      "important": false,
-      "name": "BUSTINE MEDIE"
+      "active": true
     },
     {
       "id": "bustine-pane",
-      "categoryId": "consumabili",
-      "important": false,
       "name": "BUSTINE PANE",
+      "categoryId": "consumabili",
       "active": true
     },
     {
       "id": "bustine-piccoli",
-      "active": true,
-      "important": false,
+      "name": "BUSTINE PICCOLI",
       "categoryId": "consumabili",
-      "name": "BUSTINE PICCOLI"
+      "active": true
     },
     {
       "id": "bustine-plastica",
-      "important": false,
       "name": "BUSTINE PLASTICA",
       "categoryId": "consumabili",
       "active": true
     },
     {
       "id": "caffe",
-      "active": true,
       "name": "CAFFE",
-      "important": false,
-      "categoryId": "caffetteria"
+      "categoryId": "caffetteria",
+      "active": true
     },
     {
-      "id": "caffe-2",
-      "active": true,
-      "important": false,
+      "id": "caffe-tovaglioli",
+      "name": "CAFFE",
       "categoryId": "tovaglioli",
-      "name": "CAFFE"
+      "active": true
     },
     {
       "id": "caffe-dek",
-      "categoryId": "caffetteria",
       "name": "CAFFE DEK",
-      "important": false,
+      "categoryId": "caffetteria",
       "active": true
     },
     {
       "id": "campari",
       "name": "CAMPARI",
-      "active": true,
       "categoryId": "aperitivo",
-      "important": false
+      "active": true
     },
     {
       "id": "campari-soda",
-      "categoryId": "aperitivo",
       "name": "CAMPARI SODA",
-      "important": false,
+      "categoryId": "aperitivo",
       "active": true
     },
     {
       "id": "candeggina",
+      "name": "CANDEGGINA",
       "categoryId": "pulizia",
-      "active": true,
-      "important": false,
-      "name": "CANDEGGINA"
+      "active": true
     },
     {
-      "id": "cannuccce",
-      "important": false,
+      "id": "cannucce-aperitivo",
+      "name": "CANNUCCE",
       "categoryId": "aperitivo",
-      "name": "CANNUCCCE",
       "active": true
     },
     {
       "id": "cannucce",
-      "categoryId": "consumabili",
       "name": "CANNUCCE",
-      "active": true,
-      "important": false
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "carta",
-      "important": false,
+      "name": "CARTA",
       "categoryId": "pulizia",
-      "active": true,
-      "name": "CARTA"
+      "active": true
     },
     {
       "id": "carta-forno",
-      "important": false,
+      "name": "CARTA FORNO",
       "categoryId": "consumabili",
-      "active": true,
-      "name": "CARTA FORNO"
+      "active": true
     },
     {
       "id": "chino",
-      "categoryId": "bibite-varie",
       "name": "CHINO",
-      "important": false,
+      "categoryId": "bibite-varie",
       "active": true
     },
     {
       "id": "cioccolata-calda",
-      "important": false,
+      "name": "CIOCCOLATA CALDA",
       "categoryId": "caffetteria",
-      "active": true,
-      "name": "CIOCCOLATA CALDA"
+      "active": true
     },
     {
       "id": "classica",
-      "categoryId": "patatine",
       "name": "CLASSICA",
-      "active": true,
-      "important": false
+      "categoryId": "patatine",
+      "active": true
     },
     {
       "id": "coca-cola",
       "name": "COCA COLA",
       "categoryId": "bibite",
-      "important": false,
       "active": true
     },
     {
       "id": "coca-cola-zero",
-      "active": true,
-      "important": false,
       "name": "COCA COLA ZERO",
-      "categoryId": "bibite"
+      "categoryId": "bibite",
+      "active": true
     },
     {
       "id": "coca-vetro",
-      "categoryId": "bibite-varie",
       "name": "COCA VETRO",
-      "important": false,
+      "categoryId": "bibite-varie",
       "active": true
     },
     {
       "id": "corona",
-      "important": false,
       "name": "CORONA",
-      "active": true,
-      "categoryId": "birre"
+      "categoryId": "birre",
+      "active": true
     },
     {
       "id": "cotoletta",
-      "important": false,
-      "categoryId": "congelato",
       "name": "COTOLETTA",
+      "categoryId": "congelato",
       "active": true
     },
     {
       "id": "cotto",
-      "active": true,
-      "categoryId": "freschi",
       "name": "COTTO",
-      "important": false
+      "categoryId": "freschi",
+      "active": true
     },
     {
       "id": "crodino",
       "name": "CRODINO",
-      "active": true,
       "categoryId": "aperitivo",
-      "important": false
+      "active": true
     },
     {
       "id": "crudo",
-      "categoryId": "freschi",
       "name": "CRUDO",
-      "active": true,
-      "important": false
+      "categoryId": "freschi",
+      "active": true
     },
     {
       "id": "estathe-limone",
-      "categoryId": "bibite-varie",
-      "active": true,
       "name": "ESTATHE' LIMONE",
-      "important": false
+      "categoryId": "bibite-varie",
+      "active": true
     },
     {
       "id": "estathe-pesca",
-      "active": true,
+      "name": "ESTATHE' PESCA",
       "categoryId": "bibite-varie",
-      "important": false,
-      "name": "ESTATHE' PESCA"
+      "active": true
     },
     {
       "id": "fanta",
-      "important": false,
+      "name": "FANTA",
       "categoryId": "bibite",
-      "active": true,
-      "name": "FANTA"
+      "active": true
     },
     {
       "id": "focacciotto",
-      "active": true,
-      "name": "focacciotto",
+      "name": "FOCACCIOTTO",
       "categoryId": "congelato",
-      "important": false
+      "active": true
     },
     {
       "id": "fontina",
-      "categoryId": "freschi",
-      "active": true,
       "name": "FONTINA",
-      "important": false
+      "categoryId": "freschi",
+      "active": true
     },
     {
       "id": "fusto",
-      "important": false,
       "name": "FUSTO",
-      "active": true,
-      "categoryId": "birre"
+      "categoryId": "birre",
+      "active": true
     },
     {
       "id": "ginseng",
       "name": "GINSENG",
-      "important": false,
       "categoryId": "caffetteria",
       "active": true
     },
     {
       "id": "grandi",
       "name": "GRANDI",
-      "important": false,
-      "active": true,
-      "categoryId": "tovaglioli"
+      "categoryId": "tovaglioli",
+      "active": true
     },
     {
       "id": "guanti-neri",
       "name": "GUANTI NERI",
-      "active": true,
       "categoryId": "pulizia",
-      "important": false
+      "active": true
     },
     {
       "id": "heineken",
-      "important": false,
       "name": "HEINEKEN",
       "categoryId": "birre",
       "active": true
@@ -509,252 +483,216 @@
     {
       "id": "hotdog",
       "name": "HOTDOG",
-      "active": true,
-      "important": false,
-      "categoryId": "pane"
+      "categoryId": "pane",
+      "active": true
     },
     {
       "id": "hygienist",
+      "name": "HYGIENIST",
       "categoryId": "pulizia",
-      "active": true,
-      "important": false,
-      "name": "HYGIENIST"
+      "active": true
     },
     {
       "id": "insalata",
-      "important": false,
-      "categoryId": "verdura",
       "name": "INSALATA",
+      "categoryId": "verdura",
       "active": true
     },
     {
       "id": "ketchup",
-      "important": false,
-      "active": true,
+      "name": "KETCHUP",
       "categoryId": "cucina",
-      "name": "KETCHUP"
+      "active": true
     },
     {
       "id": "latte-normale",
-      "active": true,
-      "categoryId": "latte",
       "name": "LATTE NORMALE",
-      "important": false
+      "categoryId": "latte",
+      "active": true
     },
     {
       "id": "latte-riso",
-      "important": false,
       "name": "LATTE RISO",
-      "active": true,
-      "categoryId": "latte"
+      "categoryId": "latte",
+      "active": true
     },
     {
       "id": "latte-soia",
       "name": "LATTE SOIA",
       "categoryId": "latte",
-      "important": false,
       "active": true
     },
     {
       "id": "latte-zymil",
-      "important": false,
+      "name": "LATTE ZYMIL",
       "categoryId": "latte",
-      "active": true,
-      "name": "LATTE ZYMIL"
+      "active": true
     },
     {
       "id": "lemon-soda",
+      "name": "LEMON SODA",
       "categoryId": "bibite-varie",
-      "active": true,
-      "important": false,
-      "name": "LEMON SODA"
+      "active": true
     },
     {
       "id": "lime",
-      "categoryId": "patatine",
-      "active": true,
       "name": "LIME",
-      "important": false
+      "categoryId": "patatine",
+      "active": true
     },
     {
-      "id": "limone-1",
-      "important": false,
-      "active": true,
+      "id": "limone-tanica",
+      "name": "LIMONE",
       "categoryId": "tanica",
-      "name": "Limone"
+      "active": true
     },
     {
       "id": "limone",
-      "categoryId": "frutta",
       "name": "LIMONE",
-      "active": true,
-      "important": false
+      "categoryId": "frutta",
+      "active": true
     },
     {
       "id": "maionese",
-      "important": false,
-      "active": true,
       "name": "MAIONESE",
-      "categoryId": "cucina"
+      "categoryId": "cucina",
+      "active": true
+    },
+    {
+      "id": "mela-succo",
+      "name": "MELA",
+      "categoryId": "succhi",
+      "active": true
     },
     {
       "id": "mela",
       "name": "MELA",
-      "active": true,
-      "categoryId": "succhi",
-      "important": false
-    },
-    {
-      "id": "mela-2",
-      "name": "MELA",
       "categoryId": "frutta",
-      "important": false,
       "active": true
     },
     {
       "id": "mirtillo",
       "name": "MIRTILLO",
-      "important": false,
-      "active": true,
-      "categoryId": "succhi"
+      "categoryId": "succhi",
+      "active": true
     },
     {
       "id": "moretti-gr",
-      "active": true,
       "name": "MORETTI GR.",
-      "important": false,
-      "categoryId": "birre"
+      "categoryId": "birre",
+      "active": true
     },
     {
       "id": "moretti-picc",
-      "active": true,
-      "important": false,
       "name": "MORETTI PICC.",
-      "categoryId": "birre"
+      "categoryId": "birre",
+      "active": true
     },
     {
       "id": "mortadella",
-      "active": true,
-      "important": false,
+      "name": "MORTADELLA",
       "categoryId": "freschi",
-      "name": "MORTADELLA"
+      "active": true
     },
     {
       "id": "mozzarella-filone",
-      "active": true,
-      "important": false,
+      "name": "MOZZARELLA FILONE",
       "categoryId": "freschi",
-      "name": "MOZZARELLA FILONE"
+      "active": true
     },
     {
       "id": "multimateriale",
-      "active": true,
       "name": "MULTIMATERIALE",
       "categoryId": "sacchi",
-      "important": false
+      "active": true
     },
     {
       "id": "neri",
-      "active": true,
-      "important": false,
       "name": "NERI",
-      "categoryId": "sacchi"
+      "categoryId": "sacchi",
+      "active": true
     },
     {
       "id": "nero",
-      "active": true,
+      "name": "NERO",
       "categoryId": "cencini",
-      "important": false,
-      "name": "NERO"
+      "active": true
     },
     {
       "id": "noccioline",
-      "active": true,
       "name": "NOCCIOLINE",
-      "important": false,
-      "categoryId": "aperitivo"
+      "categoryId": "aperitivo",
+      "active": true
     },
     {
       "id": "olio-oliva",
       "name": "OLIO OLIVA",
-      "active": true,
-      "important": false,
-      "categoryId": "cucina"
+      "categoryId": "cucina",
+      "active": true
     },
     {
       "id": "olive",
-      "important": false,
-      "active": true,
+      "name": "OLIVE",
       "categoryId": "aperitivo",
-      "name": "OLIVE"
+      "active": true
     },
     {
       "id": "organico",
       "name": "ORGANICO",
-      "important": false,
-      "active": true,
-      "categoryId": "sacchi"
+      "categoryId": "sacchi",
+      "active": true
     },
     {
       "id": "orzo",
+      "name": "ORZO",
       "categoryId": "caffetteria",
-      "active": true,
-      "important": false,
-      "name": "ORZO"
+      "active": true
     },
     {
       "id": "palettine-caffe",
-      "active": true,
-      "important": false,
+      "name": "PALETTINE CAFFE",
       "categoryId": "consumabili",
-      "name": "PALETTINE CAFFE"
+      "active": true
     },
     {
       "id": "palettine-cappuccino",
       "name": "PALETTINE CAPPUCCINO",
-      "active": true,
       "categoryId": "consumabili",
-      "important": false
+      "active": true
     },
     {
       "id": "pancarre-bianco",
-      "categoryId": "pane",
-      "important": false,
       "name": "PANCARRE' BIANCO",
+      "categoryId": "pane",
       "active": true
     },
     {
       "id": "pancarre-integrale",
       "name": "PANCARRE' INTEGRALE",
       "categoryId": "pane",
-      "important": false,
       "active": true
     },
     {
       "id": "patatine",
-      "active": true,
-      "categoryId": "aperitivo",
       "name": "PATATINE",
-      "important": false
+      "categoryId": "aperitivo",
+      "active": true
     },
     {
       "id": "pellicola",
+      "name": "PELLICOLA",
       "categoryId": "consumabili",
-      "active": true,
-      "important": false,
-      "name": "PELLICOLA"
+      "active": true
     },
     {
       "id": "pera",
-      "categoryId": "succhi",
       "name": "PERA",
-      "important": false,
+      "categoryId": "succhi",
       "active": true
     },
     {
       "id": "peroni",
       "name": "PERONI",
-      "important": false,
       "categoryId": "birre",
       "active": true
     },
@@ -762,381 +700,325 @@
       "id": "pesca",
       "name": "PESCA",
       "categoryId": "succhi",
-      "important": false,
       "active": true
     },
     {
-      "id": "piccoli",
+      "id": "piccoli-sacchi",
+      "name": "PICCOLI",
       "categoryId": "sacchi",
-      "name": "PICCOLI",
-      "important": false,
       "active": true
     },
     {
-      "id": "piccoli-2",
-      "categoryId": "tovaglioli",
+      "id": "piccoli-tovaglioli",
       "name": "PICCOLI",
-      "active": true,
-      "important": false
+      "categoryId": "tovaglioli",
+      "active": true
     },
     {
-      "id": "pomodoro",
+      "id": "pomodoro-verdura",
       "name": "POMODORO",
       "categoryId": "verdura",
-      "important": false,
       "active": true
     },
     {
-      "id": "pomodoro-2",
+      "id": "pomodoro-patatine",
       "name": "POMODORO",
       "categoryId": "patatine",
-      "important": false,
       "active": true
     },
     {
       "id": "post-it",
       "name": "POST-IT",
-      "active": true,
       "categoryId": "consumabili",
-      "important": false
+      "active": true
     },
     {
       "id": "prosecco",
-      "important": false,
-      "categoryId": "aperitivo",
       "name": "PROSECCO",
+      "categoryId": "aperitivo",
       "active": true
     },
     {
       "id": "redbull",
-      "categoryId": "bibite-varie",
       "name": "REDBULL",
-      "important": false,
+      "categoryId": "bibite-varie",
       "active": true
     },
     {
       "id": "rosa",
-      "categoryId": "cencini",
       "name": "ROSA",
-      "active": true,
-      "important": false
+      "categoryId": "cencini",
+      "active": true
     },
     {
       "id": "rotolini-cassa",
       "name": "ROTOLINI CASSA",
-      "important": false,
-      "active": true,
-      "categoryId": "consumabili"
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "rotolini-pos",
       "name": "ROTOLINI POS",
-      "active": true,
-      "important": false,
-      "categoryId": "consumabili"
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "rotolone-bello",
-      "categoryId": "pulizia",
-      "active": true,
       "name": "ROTOLONE BELLO",
-      "important": false
+      "categoryId": "pulizia",
+      "active": true
     },
     {
       "id": "rotolone-brutto",
-      "important": false,
       "name": "ROTOLONE BRUTTO",
-      "active": true,
-      "categoryId": "pulizia"
+      "categoryId": "pulizia",
+      "active": true
     },
     {
       "id": "rucola",
       "name": "RUCOLA",
-      "important": false,
       "categoryId": "verdura",
       "active": true
     },
     {
       "id": "salame",
+      "name": "SALAME",
       "categoryId": "freschi",
-      "important": false,
-      "active": true,
-      "name": "SALAME"
+      "active": true
     },
     {
       "id": "sale",
-      "active": true,
-      "categoryId": "cucina",
       "name": "SALE",
-      "important": false
+      "categoryId": "cucina",
+      "active": true
     },
     {
       "id": "sanbitter",
-      "categoryId": "aperitivo",
       "name": "SANBITTER",
-      "important": false,
+      "categoryId": "aperitivo",
       "active": true
     },
     {
       "id": "lavabicchieri",
-      "active": true,
       "name": "SAPONE LAVABICCHIERI",
       "categoryId": "pulizia",
-      "important": false
+      "active": true
     },
     {
       "id": "sapone-piatti",
       "name": "SAPONE PIATTI",
       "categoryId": "pulizia",
-      "active": true,
-      "important": false
+      "active": true
     },
     {
       "id": "scamorza",
-      "active": true,
-      "important": false,
+      "name": "SCAMORZA",
       "categoryId": "freschi",
-      "name": "SCAMORZA"
+      "active": true
     },
     {
       "id": "schweppes-tonica",
-      "important": false,
       "name": "SCHWEPPES TONICA",
       "categoryId": "bibite-varie",
       "active": true
     },
     {
       "id": "sciroppo-zucchero",
-      "important": false,
-      "categoryId": "caffetteria",
       "name": "SCIROPPO ZUCCHERO",
+      "categoryId": "caffetteria",
       "active": true
     },
     {
       "id": "senape",
-      "important": false,
       "name": "SENAPE",
-      "active": true,
-      "categoryId": "cucina"
+      "categoryId": "cucina",
+      "active": true
     },
     {
       "id": "sgrassatore",
-      "categoryId": "pulizia",
       "name": "SGRASSATORE",
-      "active": true,
-      "important": false
+      "categoryId": "pulizia",
+      "active": true
     },
     {
       "id": "silhouette",
       "name": "SILHOUETTE",
-      "important": false,
       "categoryId": "caffetteria",
       "active": true
     },
     {
       "id": "smac-acciaio",
-      "important": false,
-      "active": true,
       "name": "SMAC ACCIAIO",
-      "categoryId": "pulizia"
+      "categoryId": "pulizia",
+      "active": true
     },
     {
       "id": "spinaci",
-      "active": true,
-      "categoryId": "verdura",
       "name": "SPINACI",
-      "important": false
+      "categoryId": "verdura",
+      "active": true
     },
     {
       "id": "sprite",
-      "important": false,
-      "categoryId": "bibite",
       "name": "SPRITE",
+      "categoryId": "bibite",
       "active": true
     },
     {
       "id": "spuma",
-      "active": true,
       "name": "SPUMA",
       "categoryId": "bibite-varie",
-      "important": false
+      "active": true
     },
     {
       "id": "tacchino",
-      "active": true,
-      "important": false,
       "name": "TACCHINO",
-      "categoryId": "freschi"
+      "categoryId": "freschi",
+      "active": true
     },
     {
       "id": "tappi-caffe",
-      "active": true,
       "name": "TAPPI CAFFE",
-      "important": false,
-      "categoryId": "consumabili"
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "tappi-cappuccino",
-      "categoryId": "consumabili",
       "name": "TAPPI CAPPUCCINO",
-      "important": false,
+      "categoryId": "consumabili",
       "active": true
     },
     {
       "id": "taralli",
       "name": "TARALLI",
       "categoryId": "aperitivo",
-      "active": true,
-      "important": false
+      "active": true
     },
     {
       "id": "te-limone",
-      "active": true,
+      "name": "TE' LIMONE",
       "categoryId": "bibite",
-      "important": false,
-      "name": "TE' LIMONE"
+      "active": true
     },
     {
       "id": "te-nero",
-      "active": true,
-      "categoryId": "caffetteria",
       "name": "TE' NERO",
-      "important": false
+      "categoryId": "caffetteria",
+      "active": true
     },
     {
       "id": "te-pesca",
-      "active": true,
       "name": "TE' PESCA",
       "categoryId": "bibite",
-      "important": false
+      "active": true
     },
     {
       "id": "te-verde",
-      "important": false,
+      "name": "TE' VERDE",
       "categoryId": "caffetteria",
-      "active": true,
-      "name": "TE' VERDE"
+      "active": true
     },
     {
       "id": "tennents",
-      "important": false,
+      "name": "TENNENT'S",
       "categoryId": "birre",
-      "active": true,
-      "name": "TENNENT'S"
+      "active": true
     },
     {
       "id": "toast-bianco",
-      "active": true,
-      "categoryId": "pane",
       "name": "TOAST BIANCO",
-      "important": false
+      "categoryId": "pane",
+      "active": true
     },
     {
       "id": "toast-integrale",
-      "categoryId": "pane",
-      "important": false,
       "name": "TOAST INTEGRALE",
+      "categoryId": "pane",
       "active": true
     },
     {
       "id": "tonica-grande",
-      "categoryId": "aperitivo",
       "name": "TONICA GRANDE",
-      "active": true,
-      "important": false
+      "categoryId": "aperitivo",
+      "active": true
     },
     {
       "id": "tonno",
       "name": "TONNO",
-      "active": true,
       "categoryId": "cucina",
-      "important": false
+      "active": true
     },
     {
       "id": "velina-grande",
-      "active": true,
-      "categoryId": "consumabili",
       "name": "VELINA GRANDE",
-      "important": false
+      "categoryId": "consumabili",
+      "active": true
     },
     {
       "id": "velina-piccola",
-      "active": true,
       "name": "VELINA PICCOLA",
       "categoryId": "consumabili",
-      "important": false
+      "active": true
     },
     {
       "id": "verde",
-      "important": false,
       "name": "VERDE",
-      "active": true,
-      "categoryId": "cencini"
+      "categoryId": "cencini",
+      "active": true
     },
     {
       "id": "vetro",
-      "active": true,
+      "name": "VETRO",
       "categoryId": "pulizia",
-      "important": false,
-      "name": "VETRO"
+      "active": true
     },
     {
       "id": "viakal",
-      "active": true,
-      "categoryId": "pulizia",
       "name": "VIAKAL",
-      "important": false
+      "categoryId": "pulizia",
+      "active": true
     },
     {
       "id": "vino-bianco",
-      "categoryId": "aperitivo",
-      "active": true,
       "name": "VINO BIANCO",
-      "important": false
+      "categoryId": "aperitivo",
+      "active": true
     },
     {
       "id": "vino-rosso",
+      "name": "VINO ROSSO",
       "categoryId": "aperitivo",
-      "active": true,
-      "important": false,
-      "name": "VINO ROSSO"
+      "active": true
     },
     {
       "id": "vivace",
-      "important": false,
+      "name": "VIVACE",
       "categoryId": "patatine",
-      "active": true,
-      "name": "VIVACE"
+      "active": true
     },
     {
       "id": "wurstel",
-      "important": false,
+      "name": "WURSTEL",
       "categoryId": "freschi",
-      "active": true,
-      "name": "WURSTEL"
+      "active": true
     },
     {
       "id": "zattera",
-      "name": "Zattera",
-      "active": true,
-      "important": false,
-      "categoryId": "congelato"
+      "name": "ZATTERA",
+      "categoryId": "congelato",
+      "active": true
     },
     {
       "id": "zucchero-1kg",
-      "active": true,
       "name": "ZUCCHERO 1KG",
       "categoryId": "caffetteria",
-      "important": false
+      "active": true
     },
     {
       "id": "zucchero-bustine",
-      "active": true,
+      "name": "ZUCCHERO BUSTINE",
       "categoryId": "caffetteria",
-      "important": false,
-      "name": "ZUCCHERO BUSTINE"
+      "active": true
     }
-  ],
-  "exportDate": "2025-08-31T20:28:54.355Z",
-  "version": "1.2.0"
+  ]
 }

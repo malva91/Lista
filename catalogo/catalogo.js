@@ -1,31 +1,18 @@
-import { db } from '../shared/firebase.js?v=1.2.0';
-import {
-  collection, doc, getDocs, getDoc, setDoc, deleteDoc, addDoc, updateDoc
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { generateUniqueId, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.2.0';
-import {
-  safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu,
-  getAdaptiveBatchSize, scheduleRender, globalBatchProcessor, smartPrefetcher,
-  preloadCriticalData, initEnhancedIntersectionObserver, createScrollHandler
-} from '../shared/utils.js?v=1.2.0';
-import { productsLoader } from '../shared/products-loader.js?v=1.2.0';
+import { db } from '../shared/firebase.js?v=1.3.0';
+import { collection, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.3.0';
+import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.3.0';
+import { productsLoader } from '../shared/products-loader.js?v=1.3.0';
 
 class CatalogoManager {
   constructor() {
     this.categories = [];
     this.products = [];
     this.filteredProducts = [];
-    this.renderedProducts = [];
-    this.currentBatch = 0;
-    this.isLoading = false;
-    this.hasMoreProducts = true;
     this.selectedCategory = '';
     this.searchTerm = '';
     this.collapsedCategories = new Set();
-    this.editingCategory = null;
-    this.editingProduct = null;
-    this.intersectionObserver = null;
-    this.loadingIndicator = null;
+    this.currentView = 'catalog'; // 'catalog' or 'editor'
 
     this.init();
   }
@@ -35,18 +22,11 @@ class CatalogoManager {
     initTheme();
     initHamburgerMenu();
 
-    // Initialize enhanced intersection observer
-    this.intersectionObserver = initEnhancedIntersectionObserver();
-
-    // Preload critical data
-    preloadCriticalData();
-
     this.setupEventListeners();
-
     this.showLoadingState();
 
-    await this.loadDataOptimized();
-    this.filterAndRenderProducts();
+    await this.loadData();
+    this.renderView();
   }
 
   showLoadingState() {
@@ -56,43 +36,17 @@ class CatalogoManager {
       loadingEl.innerHTML = `
         <div style="text-align: center; padding: 2rem;">
           <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid var(--border-color); border-top: 4px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;"></div>
-          <div id="loadingText">Caricamento catalogo...</div>
-          <div id="loadingProgress" style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;"></div>
+          <div>Caricamento catalogo...</div>
         </div>
       `;
     }
   }
 
-  updateLoadingProgress(message) {
-    const progressEl = document.getElementById('loadingProgress');
-    if (progressEl) {
-      progressEl.textContent = message;
-    }
-  }
-
-  async loadDataOptimized() {
-    const startTime = performance.now();
-
+  async loadData() {
     try {
-      this.updateLoadingProgress('Caricamento catalogo prodotti...');
-      
-      // Carica prodotti e categorie dal JSON
       const { products, categories } = await productsLoader.loadProducts();
-      
       this.products = products;
       this.categories = categories;
-      
-      this.renderCategoriesList();
-      this.renderCategoryFilters();
-      this.renderProductCategorySelect();
-      this.loadCollapsedState();
-      
-      this.updateLoadingProgress(`${this.products.length} prodotti caricati dal catalogo`);
-
-      const loadTime = performance.now() - startTime;
-      console.log(`Catalogo caricato in ${loadTime.toFixed(2)}ms`);
-
-      // Aggiorna statistiche
       this.updateStats();
     } catch (error) {
       console.error('Errore caricamento dati:', error);
@@ -106,47 +60,34 @@ class CatalogoManager {
     const totalProductsEl = document.getElementById('totalProducts');
     const totalCategoriesEl = document.getElementById('totalCategories');
     const activeProductsEl = document.getElementById('activeProducts');
-    const importantProductsEl = document.getElementById('importantProducts');
     
     if (totalProductsEl) totalProductsEl.textContent = stats.totalProducts;
-    if (totalCategoriesEl) totalCategoriesEl.textContent = stats.visibleCategories;
+    if (totalCategoriesEl) totalCategoriesEl.textContent = stats.totalCategories;
     if (activeProductsEl) activeProductsEl.textContent = stats.activeProducts;
-    if (importantProductsEl) importantProductsEl.textContent = stats.importantProducts;
   }
 
   setupEventListeners() {
-    // Category management
-    // Le operazioni di gestione ora puntano al JSON
-    console.log('📄 Gestione catalogo tramite prodotti.json');
+    // View switcher
+    const catalogViewBtn = safeQuerySelector('#catalogViewBtn');
+    const editorViewBtn = safeQuerySelector('#editorViewBtn');
+    
+    if (catalogViewBtn) {
+      safeAddEventListener(catalogViewBtn, 'click', () => this.switchView('catalog'));
+    }
+    
+    if (editorViewBtn) {
+      safeAddEventListener(editorViewBtn, 'click', () => this.switchView('editor'));
+    }
 
-    // Search and filters
+    // Search
     const searchInput = safeQuerySelector('#searchInput');
     if (searchInput) {
       const debouncedSearch = debounce((e) => {
         this.searchTerm = e.target.value.toLowerCase();
-
-        // Track search patterns
-        if (this.searchTerm.length > 2) {
-          smartPrefetcher.trackInteraction('catalog_search', { term: this.searchTerm });
-        }
-
-        this.resetPagination();
         this.filterAndRenderProducts();
-      }, 200);
+      }, 300);
 
       safeAddEventListener(searchInput, 'input', debouncedSearch);
-    }
-
-    // Optimized infinite scroll
-    const container = safeQuerySelector('#productsList');
-    if (container) {
-      const scrollHandler = createScrollHandler((scrollInfo) => {
-        if (this.hasMoreProducts && !this.isLoading) {
-          this.loadMoreProducts();
-        }
-      }, 200);
-
-      safeAddEventListener(container, 'scroll', scrollHandler, { passive: true });
     }
 
     // Global controls
@@ -160,7 +101,6 @@ class CatalogoManager {
       safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
     }
 
-    // Show all products button
     const showAllBtn = safeQuerySelector('#showAllBtn');
     if (showAllBtn) {
       safeAddEventListener(showAllBtn, 'click', () => {
@@ -174,97 +114,70 @@ class CatalogoManager {
       });
     }
 
-    // Import/Export
+    // Export/Import
     const exportBtn = safeQuerySelector('#exportBtn');
     if (exportBtn) {
       safeAddEventListener(exportBtn, 'click', () => this.exportData());
     }
 
-    const importFile = safeQuerySelector('#importFile');
-    if (importFile) {
-      safeAddEventListener(importFile, 'change', (e) => this.importData(e));
+    // Editor controls
+    const saveEditorBtn = safeQuerySelector('#saveEditorBtn');
+    if (saveEditorBtn) {
+      safeAddEventListener(saveEditorBtn, 'click', () => this.saveFromEditor());
     }
 
-    // Reload button per sviluppo
-    const reloadBtn = document.createElement('button');
-    reloadBtn.className = 'btn btn-secondary';
-    reloadBtn.textContent = '🔄 Ricarica Catalogo';
-    reloadBtn.style.marginLeft = 'var(--spacing-sm)';
-    
-    const exportBtnParent = exportBtn?.parentNode;
-    if (exportBtnParent) {
-      exportBtnParent.insertBefore(reloadBtn, exportBtn.nextSibling);
+    const loadEditorBtn = safeQuerySelector('#loadEditorBtn');
+    if (loadEditorBtn) {
+      safeAddEventListener(loadEditorBtn, 'click', () => this.loadToEditor());
+    }
+
+    const validateEditorBtn = safeQuerySelector('#validateEditorBtn');
+    if (validateEditorBtn) {
+      safeAddEventListener(validateEditorBtn, 'click', () => this.validateEditor());
+    }
+
+    // Add category/product buttons
+    const addCategoryBtn = safeQuerySelector('#addCategoryBtn');
+    if (addCategoryBtn) {
+      safeAddEventListener(addCategoryBtn, 'click', () => this.showAddCategoryForm());
+    }
+
+    const addProductBtn = safeQuerySelector('#addProductBtn');
+    if (addProductBtn) {
+      safeAddEventListener(addProductBtn, 'click', () => this.showAddProductForm());
+    }
+  }
+
+  switchView(view) {
+    this.currentView = view;
+    this.renderView();
+  }
+
+  renderView() {
+    const catalogView = safeQuerySelector('#catalogView');
+    const editorView = safeQuerySelector('#editorView');
+    const catalogViewBtn = safeQuerySelector('#catalogViewBtn');
+    const editorViewBtn = safeQuerySelector('#editorViewBtn');
+
+    if (this.currentView === 'catalog') {
+      if (catalogView) catalogView.classList.remove('hidden');
+      if (editorView) editorView.classList.add('hidden');
+      if (catalogViewBtn) catalogViewBtn.classList.add('active');
+      if (editorViewBtn) editorViewBtn.classList.remove('active');
       
-      safeAddEventListener(reloadBtn, 'click', async () => {
-        try {
-          reloadBtn.disabled = true;
-          reloadBtn.textContent = '🔄 Ricaricando...';
-          
-          await productsLoader.reload();
-          const { products, categories } = await productsLoader.loadProducts();
-          
-          this.products = products;
-          this.categories = categories;
-          
-          this.renderCategoriesList();
-          this.renderCategoryFilters();
-          this.renderProductCategorySelect();
-          this.filterAndRenderProducts();
-          this.updateStats();
-          
-          showToast('Catalogo ricaricato dal JSON', 'success');
-        } catch (error) {
-          console.error('Errore ricaricamento:', error);
-          showToast(`Errore ricaricamento: ${error.message}`, 'error');
-        } finally {
-          reloadBtn.disabled = false;
-          reloadBtn.textContent = '🔄 Ricarica Catalogo';
-        }
-      });
+      this.renderCategoryFilters();
+      this.filterAndRenderProducts();
+    } else {
+      if (catalogView) catalogView.classList.add('hidden');
+      if (editorView) editorView.classList.remove('hidden');
+      if (catalogViewBtn) catalogViewBtn.classList.remove('active');
+      if (editorViewBtn) editorViewBtn.classList.add('active');
+      
+      this.loadToEditor();
     }
-  }
 
-  resetPagination() {
-    this.currentBatch = 0;
-    this.renderedProducts = [];
-    this.hasMoreProducts = true;
-    this.isLoading = false;
-  }
-
-  renderCategoriesList() {
-    const container = safeQuerySelector('#categoriesList');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
-
-    sortedCategories.forEach(category => {
-      const categoryDiv = document.createElement('div');
-      categoryDiv.className = 'category-item';
-
-      categoryDiv.innerHTML = `
-        <div class="category-item-content">
-          <div class="category-info">
-            <div class="category-color-dot" style="background-color: ${category.colorHex};"></div>
-            <span class="category-name">${category.name}</span>
-          </div>
-          <div class="category-item-actions">
-            <button class="btn-icon btn-edit" data-category-id="${category.id}">✏️</button>
-            <button class="btn-icon btn-delete" data-category-id="${category.id}">🗑️</button>
-          </div>
-        </div>
-      `;
-
-      // Add event listeners
-      const editBtn = categoryDiv.querySelector('.btn-edit');
-      const deleteBtn = categoryDiv.querySelector('.btn-delete');
-
-      editBtn.addEventListener('click', () => this.editCategory(category.id));
-      deleteBtn.addEventListener('click', () => this.deleteCategory(category.id));
-
-      container.appendChild(categoryDiv);
-    });
+    const loadingEl = document.getElementById('loadingProducts');
+    if (loadingEl) loadingEl.classList.add('hidden');
   }
 
   renderCategoryFilters() {
@@ -278,16 +191,16 @@ class CatalogoManager {
     allBtn.textContent = 'Tutte';
     allBtn.addEventListener('click', () => {
       this.selectedCategory = '';
-      this.renderProducts();
+      this.filterAndRenderProducts();
       this.updateCategoryFilters();
     });
     container.appendChild(allBtn);
 
-    // Usa solo le categorie che hanno prodotti
-    const categoriesWithProducts = productsLoader.getCategoriesWithCount().filter(cat => cat.hasProducts);
-    const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
+    const categoriesWithProducts = this.categories.filter(category => {
+      return this.products.some(p => p.categoryId === category.id);
+    });
     
-    sortedCategories.forEach(category => {
+    categoriesWithProducts.forEach(category => {
       const btn = document.createElement('button');
       btn.className = `btn btn-secondary ${this.selectedCategory === category.id ? 'active' : ''}`;
       btn.textContent = category.name;
@@ -295,7 +208,7 @@ class CatalogoManager {
       btn.style.color = this.selectedCategory === category.id ? getContrastColor(category.colorHex) : '';
       btn.addEventListener('click', () => {
         this.selectedCategory = category.id;
-        this.renderProducts();
+        this.filterAndRenderProducts();
         this.updateCategoryFilters();
       });
       container.appendChild(btn);
@@ -304,14 +217,15 @@ class CatalogoManager {
 
   updateCategoryFilters() {
     const buttons = document.querySelectorAll('#categoryFilters button');
-    const categoriesWithProducts = productsLoader.getCategoriesWithCount();
-    const sortedCategories = categoriesWithProducts.sort((a, b) => a.name.localeCompare(b.name));
-
+    const categoriesWithProducts = this.categories.filter(category => {
+      return this.products.some(p => p.categoryId === category.id);
+    });
+    
     buttons.forEach((btn, index) => {
       if (index === 0) {
         btn.classList.toggle('active', !this.selectedCategory);
       } else {
-        const category = sortedCategories[index - 1];
+        const category = categoriesWithProducts[index - 1];
         if (!category) return;
         const isActive = this.selectedCategory === category.id;
         btn.classList.toggle('active', isActive);
@@ -319,12 +233,6 @@ class CatalogoManager {
         btn.style.color = isActive ? getContrastColor(category.colorHex) : '';
       }
     });
-  }
-
-  resetPagination() {
-    this.currentBatch = 0;
-    this.renderedProducts = [];
-    this.hasMoreProducts = true;
   }
 
   filterAndRenderProducts() {
@@ -337,35 +245,16 @@ class CatalogoManager {
       return matchesSearch && matchesCategory;
     });
 
-    console.log(`🔍 Filtro applicato: ${this.filteredProducts.length} prodotti su ${this.products.length} totali`);
-    if (this.searchTerm) console.log(`📝 Termine ricerca: "${this.searchTerm}"`);
-    if (this.selectedCategory) console.log(`📂 Categoria selezionata: "${this.selectedCategory}"`);
-
-    // Reset and render first batch
-    this.resetPagination();
-
-    const container = safeQuerySelector('#productsList');
-    const loading = safeQuerySelector('#loadingProducts');
-
-    if (!container) return;
-
-    loading.classList.add('hidden');
-    container.classList.remove('hidden');
-
-    // Clear container for fresh render
-    container.innerHTML = '';
-
-    // Render all products at once for catalog management
-    this.renderAllProducts();
+    this.renderProducts();
   }
 
-  async renderAllProducts() {
+  renderProducts() {
     const container = safeQuerySelector('#productsList');
     if (!container) return;
 
-    console.log(`🎨 Rendering ${this.filteredProducts.length} prodotti...`);
+    container.innerHTML = '';
 
-    // Group all filtered products by category
+    // Group products by category
     const groupedProducts = new Map();
     this.filteredProducts.forEach(product => {
       if (!groupedProducts.has(product.categoryId)) {
@@ -374,171 +263,19 @@ class CatalogoManager {
       groupedProducts.get(product.categoryId).push(product);
     });
 
-    console.log(`📊 Prodotti raggruppati in ${groupedProducts.size} categorie`);
-
-    // Use scheduled rendering for better performance
-    await scheduleRender(() => {
-      const fragment = document.createDocumentFragment();
-
-      const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-        const categoryA = this.categories.find(c => c.id === categoryIdA);
-        const categoryB = this.categories.find(c => c.id === categoryIdB);
-        if (!categoryA || !categoryB) return 0;
-        return categoryA.name.localeCompare(categoryB.name);
-      });
-
-      categoryEntries.forEach(([categoryId, categoryProducts]) => {
-        const categorySection = this.createCategorySection(categoryId, categoryProducts);
-        if (categorySection) {
-          categorySection.setAttribute('data-category-id', categoryId);
-          fragment.appendChild(categorySection);
-        }
-      });
-
-      // Clear and append all at once
-      container.innerHTML = '';
-      container.appendChild(fragment);
-      
-      console.log(`✅ Rendering completato: ${categoryEntries.length} categorie visualizzate`);
+    // Render categories
+    const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
+      const categoryA = this.categories.find(c => c.id === categoryIdA);
+      const categoryB = this.categories.find(c => c.id === categoryIdB);
+      if (!categoryA || !categoryB) return 0;
+      return categoryA.name.localeCompare(categoryB.name);
     });
-  }
 
-  async loadMoreProducts() {
-    if (this.isLoading || !this.hasMoreProducts) return;
-
-    this.isLoading = true;
-    this.showLoadingIndicator();
-
-    const batchSize = getAdaptiveBatchSize();
-    const startIndex = this.currentBatch * batchSize;
-    const endIndex = startIndex + batchSize;
-
-    if (startIndex >= this.filteredProducts.length) {
-      this.hasMoreProducts = false;
-      this.hideLoadingIndicator();
-      this.isLoading = false;
-      return;
-    }
-
-    const batch = this.filteredProducts.slice(startIndex, endIndex);
-    this.renderedProducts.push(...batch);
-
-    this.currentBatch++;
-    this.hasMoreProducts = endIndex < this.filteredProducts.length;
-
-    await this.renderProductsBatch(batch, startIndex === 0);
-
-    this.hideLoadingIndicator();
-    this.isLoading = false;
-  }
-
-  showLoadingIndicator() {
-    if (this.loadingIndicator) return;
-
-    const container = safeQuerySelector('#productsList');
-    if (!container) return;
-
-    this.loadingIndicator = document.createElement('div');
-    this.loadingIndicator.className = 'loading-more';
-    this.loadingIndicator.innerHTML = `
-      <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border-color); border-top: 2px solid var(--accent-primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 0.5rem;"></div>
-      Caricamento altri prodotti...
-    `;
-
-    container.appendChild(this.loadingIndicator);
-  }
-
-  hideLoadingIndicator() {
-    if (this.loadingIndicator && this.loadingIndicator.parentNode) {
-      this.loadingIndicator.remove();
-      this.loadingIndicator = null;
-    }
-  }
-  renderProductCategorySelect() {
-    const select = safeQuerySelector('#productCategory');
-    if (!select) return;
-
-    select.innerHTML = '<option value="">Seleziona categoria</option>';
-
-    const sortedCategories = [...this.categories].sort((a, b) => a.name.localeCompare(b.name));
-    sortedCategories.forEach(category => {
-      const option = document.createElement('option');
-      option.value = category.id;
-      option.textContent = category.name;
-      select.appendChild(option);
-    });
-  }
-
-  renderProducts() {
-    const container = safeQuerySelector('#productsList');
-    const loading = safeQuerySelector('#loadingProducts');
-
-    if (!container) return;
-
-    loading.classList.add('hidden');
-    container.classList.remove('hidden');
-
-    // Clear container for fresh render
-    container.innerHTML = '';
-
-    // Reset pagination state
-    this.resetPagination();
-
-    // Load first batch
-    this.loadMoreProducts();
-  }
-
-  async renderProductsBatch(products, isFirstBatch = false) {
-    const container = safeQuerySelector('#productsList');
-    if (!container) return;
-
-    // Group products by category
-    const groupedProducts = new Map();
-    products.forEach(product => {
-      if (!groupedProducts.has(product.categoryId)) {
-        groupedProducts.set(product.categoryId, []);
+    categoryEntries.forEach(([categoryId, categoryProducts]) => {
+      const categorySection = this.createCategorySection(categoryId, categoryProducts);
+      if (categorySection) {
+        container.appendChild(categorySection);
       }
-      groupedProducts.get(product.categoryId).push(product);
-    });
-
-    // Use scheduled rendering for better performance
-    await scheduleRender(() => {
-      const fragment = document.createDocumentFragment();
-
-      const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
-        const categoryA = this.categories.find(c => c.id === categoryIdA);
-        const categoryB = this.categories.find(c => c.id === categoryIdB);
-        if (!categoryA || !categoryB) return 0;
-        return categoryA.name.localeCompare(categoryB.name);
-      });
-
-      categoryEntries.forEach(([categoryId, categoryProducts]) => {
-        // Check if category section already exists
-        let categorySection = container.querySelector(`[data-category-id="${categoryId}"]`);
-
-        if (!categorySection) {
-          categorySection = this.createCategorySection(categoryId, categoryProducts);
-          if (categorySection) {
-            categorySection.setAttribute('data-category-id', categoryId);
-            fragment.appendChild(categorySection);
-          }
-        } else {
-          // Add products to existing category
-          const productsGrid = categorySection.querySelector('.products-grid');
-          if (productsGrid) {
-            const productFragment = document.createDocumentFragment();
-            categoryProducts.forEach(product => {
-              const category = this.categories.find(c => c.id === categoryId);
-              const productCard = this.createProductCard(product, category);
-              productFragment.appendChild(productCard);
-            });
-            productsGrid.appendChild(productFragment);
-          }
-        }
-      });
-
-      // Append all at once for better performance
-      container.appendChild(fragment);
     });
   }
 
@@ -550,13 +287,12 @@ class CatalogoManager {
     const isCollapsed = this.collapsedCategories.has(categoryId);
 
     const categorySection = document.createElement('div');
-    categorySection.className = 'category-section compact';
-    categorySection.style.willChange = 'transform, opacity'; // Optimize for animations
+    categorySection.className = 'category-section';
     categorySection.style.background = `linear-gradient(135deg, ${category.colorHex}10 0%, transparent 100%)`;
     categorySection.style.border = `1px solid ${category.colorHex}30`;
     categorySection.style.borderRadius = '12px';
     categorySection.style.borderLeft = `4px solid ${category.colorHex}`;
-    categorySection.style.overflow = 'hidden';
+    categorySection.style.marginBottom = '1rem';
 
     const categoryHeader = document.createElement('div');
     categoryHeader.className = 'category-header';
@@ -567,34 +303,53 @@ class CatalogoManager {
       padding: 0.75rem 1rem;
       background: ${category.colorHex}08;
       border-bottom: ${isCollapsed ? 'none' : `1px solid ${category.colorHex}20`};
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     `;
     categoryHeader.innerHTML = `
-      <div class="category-title">
-        <span class="category-toggle-icon ${isCollapsed ? 'collapsed' : ''}">▼</span>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="transition: transform 0.3s; ${isCollapsed ? 'transform: rotate(-90deg);' : ''}">▼</span>
         <span>📂</span>
-        <span style="font-weight: 600; font-size: 0.95rem;">${category.name}</span>
+        <span style="font-weight: 600;">${category.name}</span>
       </div>
-      <span class="product-count">${products.length}</span>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 0.8rem; opacity: 0.8;">${products.length}</span>
+        <button class="btn-icon btn-edit" data-category-id="${category.id}" style="width: 32px; height: 32px;">✏️</button>
+        <button class="btn-icon btn-delete" data-category-id="${category.id}" style="width: 32px; height: 32px;">🗑️</button>
+      </div>
     `;
 
-    categoryHeader.addEventListener('click', () => {
-      // Track category interactions
-      smartPrefetcher.trackInteraction('catalog_category_toggle', {
-        categoryId: category.id,
-        action: this.collapsedCategories.has(categoryId) ? 'expand' : 'collapse'
-      });
-
-      this.toggleCategory(categoryId);
+    categoryHeader.addEventListener('click', (e) => {
+      if (!e.target.closest('.btn-icon')) {
+        this.toggleCategory(categoryId);
+      }
     });
+
+    // Add event listeners for edit/delete buttons
+    const editBtn = categoryHeader.querySelector('.btn-edit');
+    const deleteBtn = categoryHeader.querySelector('.btn-delete');
+
+    if (editBtn) {
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.editCategory(category.id);
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.deleteCategory(category.id);
+      });
+    }
 
     categorySection.appendChild(categoryHeader);
 
     const categoryContent = document.createElement('div');
     categoryContent.className = 'category-content';
     categoryContent.style.cssText = `
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.3s ease;
       overflow: hidden;
       ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
     `;
@@ -615,15 +370,12 @@ class CatalogoManager {
   createProductCard(product, category) {
     const card = document.createElement('div');
     card.className = 'product-card';
-    card.style.willChange = 'transform, opacity'; // Optimize for animations
 
     card.innerHTML = `
       <div class="product-header">
         <div>
           <div class="product-name">
             ${product.name}
-            ${product.important ? '<span class="important-badge">Importante</span>' : ''}
-            ${product.active === false ? '<span class="important-badge" style="background: var(--accent-warning);">Inattivo</span>' : ''}
             ${product.unit ? `<span class="unit-badge">${product.unit}</span>` : ''}
           </div>
           <div class="product-category" style="background-color: ${category.colorHex}20; color: ${category.colorHex}; border: 1px solid ${category.colorHex};">
@@ -642,15 +394,13 @@ class CatalogoManager {
     const editBtn = card.querySelector('.btn-edit');
     const deleteBtn = card.querySelector('.btn-delete');
 
-    editBtn.addEventListener('click', () => {
-      smartPrefetcher.trackInteraction('product_edit', { productId: product.id });
-      this.editProduct(product.id);
-    });
+    if (editBtn) {
+      editBtn.addEventListener('click', () => this.editProduct(product.id));
+    }
 
-    deleteBtn.addEventListener('click', () => {
-      smartPrefetcher.trackInteraction('product_delete', { productId: product.id });
-      this.deleteProduct(product.id);
-    });
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => this.deleteProduct(product.id));
+    }
 
     return card;
   }
@@ -662,13 +412,40 @@ class CatalogoManager {
       this.collapsedCategories.add(categoryId);
     }
 
-    this.saveCollapsedState();
     this.updateCategoryVisibility();
+  }
+
+  updateCategoryVisibility() {
+    const categorySections = document.querySelectorAll('.category-section');
+    categorySections.forEach(section => {
+      const categoryHeader = section.querySelector('.category-header');
+      if (!categoryHeader) return;
+
+      const categoryId = categoryHeader.querySelector('[data-category-id]')?.dataset.categoryId;
+      if (!categoryId) return;
+
+      const isCollapsed = this.collapsedCategories.has(categoryId);
+      const content = section.querySelector('.category-content');
+      const toggleIcon = categoryHeader.querySelector('span');
+
+      if (content && toggleIcon) {
+        if (isCollapsed) {
+          content.style.maxHeight = '0';
+          content.style.opacity = '0';
+          content.style.padding = '0';
+          toggleIcon.style.transform = 'rotate(-90deg)';
+        } else {
+          content.style.maxHeight = '2000px';
+          content.style.opacity = '1';
+          content.style.padding = '0.5rem';
+          toggleIcon.style.transform = '';
+        }
+      }
+    });
   }
 
   expandAllCategories() {
     this.collapsedCategories.clear();
-    this.saveCollapsedState();
     this.updateCategoryVisibility();
     showToast('Tutte le categorie espanse', 'success');
   }
@@ -676,91 +453,278 @@ class CatalogoManager {
   collapseAllCategories() {
     const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
-    this.saveCollapsedState();
     this.updateCategoryVisibility();
     showToast('Tutte le categorie chiuse', 'success');
   }
 
-  updateCategoryVisibility() {
-    const categorySections = document.querySelectorAll('.category-section');
-    categorySections.forEach(section => {
-      const categoryId = section.getAttribute('data-category-id');
-      if (categoryId) {
-        const isCollapsed = this.collapsedCategories.has(categoryId);
-        const content = section.querySelector('.category-content');
-        const toggleIcon = section.querySelector('.category-toggle-icon');
+  // Editor functions
+  loadToEditor() {
+    const editor = safeQuerySelector('#jsonEditor');
+    if (!editor) return;
 
-        if (content && toggleIcon) {
-          if (isCollapsed) {
-            content.style.maxHeight = '0';
-            content.style.opacity = '0';
-            content.style.padding = '0';
-            toggleIcon.classList.add('collapsed');
-          } else {
-            content.style.maxHeight = '2000px';
-            content.style.opacity = '1';
-            content.style.padding = '0.5rem';
-            toggleIcon.classList.remove('collapsed');
-          }
-        }
-      }
-    });
+    const data = productsLoader.exportToJSON();
+    editor.value = JSON.stringify(data, null, 2);
   }
 
-  loadCollapsedState() {
+  validateEditor() {
+    const editor = safeQuerySelector('#jsonEditor');
+    const validationResult = safeQuerySelector('#validationResult');
+    
+    if (!editor || !validationResult) return;
+
     try {
-      const saved = localStorage.getItem('catalogoCollapsedCategories');
-      if (saved) {
-        this.collapsedCategories = new Set(JSON.parse(saved));
-      }
+      const data = JSON.parse(editor.value);
+      productsLoader.validateProductsData(data);
+      
+      validationResult.className = 'success';
+      validationResult.textContent = '✅ JSON valido!';
+      showToast('JSON valido', 'success');
     } catch (error) {
-      console.warn('Errore caricamento stato categorie:', error);
-      this.collapsedCategories = new Set();
+      validationResult.className = 'error';
+      validationResult.textContent = `❌ Errore: ${error.message}`;
+      showToast(`Errore validazione: ${error.message}`, 'error');
     }
   }
 
-  saveCollapsedState() {
+  async saveFromEditor() {
+    const editor = safeQuerySelector('#jsonEditor');
+    if (!editor) return;
+
     try {
-      localStorage.setItem('catalogoCollapsedCategories', JSON.stringify([...this.collapsedCategories]));
+      const data = JSON.parse(editor.value);
+      productsLoader.validateProductsData(data);
+
+      // Salva su Firestore
+      await productsLoader.saveToFirestore(data.categories, data.products);
+      
+      // Ricarica i dati
+      await this.loadData();
+      
+      if (this.currentView === 'catalog') {
+        this.renderCategoryFilters();
+        this.filterAndRenderProducts();
+      }
+
+      showToast('Catalogo salvato con successo!', 'success');
     } catch (error) {
-      console.warn('Errore salvataggio stato categorie:', error);
+      console.error('Errore salvataggio:', error);
+      showToast(`Errore salvataggio: ${error.message}`, 'error');
     }
   }
 
-  // Gestione categorie e prodotti ora tramite JSON
-  addCategory() {
-    showToast('Per aggiungere categorie, modifica il file prodotti.json', 'info');
+  // CRUD operations
+  showAddCategoryForm() {
+    const name = prompt('Nome categoria:');
+    if (!name) return;
+
+    const colorHex = prompt('Colore esadecimale (es. #3b82f6):');
+    if (!colorHex || !/^#[0-9A-Fa-f]{6}$/.test(colorHex)) {
+      showToast('Colore non valido', 'error');
+      return;
+    }
+
+    this.addCategory(name.trim(), colorHex);
   }
 
-  editCategory(categoryId) {
-    showToast('Per modificare categorie, modifica il file prodotti.json', 'info');
+  showAddProductForm() {
+    const name = prompt('Nome prodotto:');
+    if (!name) return;
+
+    const categoryId = prompt(`ID categoria (${this.categories.map(c => c.id).join(', ')}):`);
+    if (!categoryId || !this.categories.find(c => c.id === categoryId)) {
+      showToast('Categoria non valida', 'error');
+      return;
+    }
+
+    const unit = prompt('Unità di misura (opzionale):') || '';
+    const notes = prompt('Note (opzionale):') || '';
+
+    this.addProduct(name.trim(), categoryId, unit, notes);
   }
 
-  deleteCategory(categoryId) {
-    showToast('Per eliminare categorie, modifica il file prodotti.json', 'info');
+  async addCategory(name, colorHex) {
+    try {
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+      
+      if (this.categories.find(c => c.id === id)) {
+        showToast('ID categoria già esistente', 'error');
+        return;
+      }
+
+      const newCategory = {
+        id,
+        name,
+        colorHex,
+        order: this.categories.length + 1,
+        active: true
+      };
+
+      this.categories.push(newCategory);
+      
+      if (productsLoader.useFirestore) {
+        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', id), newCategory);
+      }
+
+      this.renderCategoryFilters();
+      this.filterAndRenderProducts();
+      showToast('Categoria aggiunta', 'success');
+    } catch (error) {
+      console.error('Errore aggiunta categoria:', error);
+      showToast('Errore aggiunta categoria', 'error');
+    }
   }
 
-  addProduct() {
-    showToast('Per aggiungere prodotti, modifica il file prodotti.json', 'info');
+  async addProduct(name, categoryId, unit, notes) {
+    try {
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+      
+      if (this.products.find(p => p.id === id)) {
+        showToast('ID prodotto già esistente', 'error');
+        return;
+      }
+
+      const newProduct = {
+        id,
+        name,
+        categoryId,
+        unit: unit || undefined,
+        notes: notes || undefined,
+        active: true
+      };
+
+      this.products.push(newProduct);
+      
+      if (productsLoader.useFirestore) {
+        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', id), newProduct);
+      }
+
+      this.filterAndRenderProducts();
+      this.updateStats();
+      showToast('Prodotto aggiunto', 'success');
+    } catch (error) {
+      console.error('Errore aggiunta prodotto:', error);
+      showToast('Errore aggiunta prodotto', 'error');
+    }
   }
 
-  editProduct(productId) {
-    showToast('Per modificare prodotti, modifica il file prodotti.json', 'info');
+  async editCategory(categoryId) {
+    const category = this.categories.find(c => c.id === categoryId);
+    if (!category) return;
+
+    const newName = prompt('Nuovo nome:', category.name);
+    if (!newName) return;
+
+    const newColor = prompt('Nuovo colore:', category.colorHex);
+    if (!newColor || !/^#[0-9A-Fa-f]{6}$/.test(newColor)) {
+      showToast('Colore non valido', 'error');
+      return;
+    }
+
+    try {
+      category.name = newName.trim();
+      category.colorHex = newColor;
+
+      if (productsLoader.useFirestore) {
+        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', categoryId), category);
+      }
+
+      this.renderCategoryFilters();
+      this.filterAndRenderProducts();
+      showToast('Categoria modificata', 'success');
+    } catch (error) {
+      console.error('Errore modifica categoria:', error);
+      showToast('Errore modifica categoria', 'error');
+    }
   }
 
-  deleteProduct(productId) {
-    showToast('Per eliminare prodotti, modifica il file prodotti.json', 'info');
+  async editProduct(productId) {
+    const product = this.products.find(p => p.id === productId);
+    if (!product) return;
+
+    const newName = prompt('Nuovo nome:', product.name);
+    if (!newName) return;
+
+    const newCategoryId = prompt(`Nuova categoria (${this.categories.map(c => c.id).join(', ')}):`, product.categoryId);
+    if (!newCategoryId || !this.categories.find(c => c.id === newCategoryId)) {
+      showToast('Categoria non valida', 'error');
+      return;
+    }
+
+    const newUnit = prompt('Unità di misura:', product.unit || '') || '';
+    const newNotes = prompt('Note:', product.notes || '') || '';
+
+    try {
+      product.name = newName.trim();
+      product.categoryId = newCategoryId;
+      product.unit = newUnit || undefined;
+      product.notes = newNotes || undefined;
+
+      if (productsLoader.useFirestore) {
+        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', productId), product);
+      }
+
+      this.filterAndRenderProducts();
+      showToast('Prodotto modificato', 'success');
+    } catch (error) {
+      console.error('Errore modifica prodotto:', error);
+      showToast('Errore modifica prodotto', 'error');
+    }
+  }
+
+  async deleteCategory(categoryId) {
+    const category = this.categories.find(c => c.id === categoryId);
+    if (!category) return;
+
+    const productsInCategory = this.products.filter(p => p.categoryId === categoryId);
+    if (productsInCategory.length > 0) {
+      showToast(`Impossibile eliminare: ci sono ${productsInCategory.length} prodotti in questa categoria`, 'error');
+      return;
+    }
+
+    if (!confirm(`Eliminare la categoria "${category.name}"?`)) return;
+
+    try {
+      this.categories = this.categories.filter(c => c.id !== categoryId);
+
+      if (productsLoader.useFirestore) {
+        await productsLoader.deleteFromFirestore('category', categoryId);
+      }
+
+      this.renderCategoryFilters();
+      this.filterAndRenderProducts();
+      this.updateStats();
+      showToast('Categoria eliminata', 'success');
+    } catch (error) {
+      console.error('Errore eliminazione categoria:', error);
+      showToast('Errore eliminazione categoria', 'error');
+    }
+  }
+
+  async deleteProduct(productId) {
+    const product = this.products.find(p => p.id === productId);
+    if (!product) return;
+
+    if (!confirm(`Eliminare il prodotto "${product.name}"?`)) return;
+
+    try {
+      this.products = this.products.filter(p => p.id !== productId);
+
+      if (productsLoader.useFirestore) {
+        await productsLoader.deleteFromFirestore('product', productId);
+      }
+
+      this.filterAndRenderProducts();
+      this.updateStats();
+      showToast('Prodotto eliminato', 'success');
+    } catch (error) {
+      console.error('Errore eliminazione prodotto:', error);
+      showToast('Errore eliminazione prodotto', 'error');
+    }
   }
 
   exportData() {
     try {
-      const data = {
-        categories: this.categories,
-        products: this.products,
-        exportDate: new Date().toISOString(),
-        version: '1.2.0'
-      };
-
+      const data = productsLoader.exportToJSON();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
 
@@ -772,17 +736,11 @@ class CatalogoManager {
       document.body.removeChild(a);
 
       URL.revokeObjectURL(url);
-
       showToast('Dati esportati con successo', 'success');
     } catch (error) {
       console.error('Errore esportazione:', error);
       showToast('Errore durante l\'esportazione', 'error');
     }
-  }
-
-  importData(event) {
-    showToast('Per importare dati, sostituisci il file prodotti.json e ricarica la pagina', 'info');
-    event.target.value = '';
   }
 
   showError(message) {
@@ -793,16 +751,6 @@ class CatalogoManager {
       setTimeout(() => errorEl.classList.add('hidden'), 5000);
     }
     showToast(message, 'error');
-  }
-
-  showSuccess(message) {
-    const successEl = safeQuerySelector('#successMessage');
-    if (successEl) {
-      successEl.textContent = message;
-      successEl.classList.remove('hidden');
-      setTimeout(() => successEl.classList.add('hidden'), 3000);
-    }
-    showToast(message, 'success');
   }
 }
 

@@ -1,15 +1,15 @@
 # 🏪 Gestione Liste Prodotti
 
-Sistema completo per la gestione delle liste prodotti per dipendenti e magazzino.
+Sistema semplificato per la gestione delle liste prodotti per dipendenti e magazzino.
 
-## 📱 Versione Corrente: 1.2.0
+## 📱 Versione Corrente: 1.3.0
 
-### 🆕 Novità Versione 1.2.0
-- ✅ Risolti problemi menu a scomparsa
-- ✅ Corretti pulsanti "Apri Tutto" e "Chiudi Tutto"
-- ✅ Ottimizzate performance su smartphone
-- ✅ Aggiunto sistema di versioning con cache busting
-- ✅ Migliorata gestione cache browser
+### 🆕 Novità Versione 1.3.0
+- ✅ Codice semplificato e ottimizzato
+- ✅ Rimossa funzione prodotti importanti
+- ✅ Aggiunto editor JSON integrato
+- ✅ Gestione catalogo tramite Firestore
+- ✅ Interfaccia più pulita e intuitiva
 
 ## 🚀 Funzionalità
 

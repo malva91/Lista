@@ -1,11 +1,11 @@
-import { db } from '../shared/firebase.js?v=1.2.0';
+import { db } from '../shared/firebase.js?v=1.3.0';
 import { 
   collection, doc, getDocs, getDoc, setDoc, onSnapshot, deleteDoc,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { formatDate, getWeekString, getDayName, showToast, getContrastColor } from '../shared/utils.js?v=1.2.0';
-import { safeQuerySelector, safeAddEventListener, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.2.0';
-import { productsLoader } from '../shared/products-loader.js?v=1.2.0';
+import { formatDate, getWeekString, getDayName, showToast, getContrastColor } from '../shared/utils.js?v=1.3.0';
+import { safeQuerySelector, safeAddEventListener, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.3.0';
+import { productsLoader } from '../shared/products-loader.js?v=1.3.0';
 
 class MagazzinoManager {
   constructor() {
@@ -35,7 +35,6 @@ class MagazzinoManager {
   
   async loadData() {
     try {
-      // Carica prodotti e categorie dal JSON
       const { products, categories } = await productsLoader.loadProducts();
       this.products = products;
       this.categories = categories;
@@ -103,7 +102,6 @@ class MagazzinoManager {
       if (notifDoc.exists()) {
         const notifData = notifDoc.data();
         
-        // Load notification entries
         const entriesSnap = await getDocs(collection(db, 'notifications', notifDocId, 'entries'));
         this.notifications = entriesSnap.docs.map(doc => ({
           id: doc.id,
@@ -159,18 +157,6 @@ class MagazzinoManager {
           message = `🔄 Modificato: ${notification.name} (${notification.oldQuantity} → ${notification.newQuantity})`;
           className = 'notification-changed';
           break;
-        case 'extraAdded':
-          message = `➕ Extra aggiunto: ${notification.name} (${notification.quantity})`;
-          className = 'notification-added';
-          break;
-        case 'extraRemoved':
-          message = `➖ Extra rimosso: ${notification.name} (${notification.quantity})`;
-          className = 'notification-removed';
-          break;
-        case 'extraChanged':
-          message = `🔄 Extra modificato: ${notification.name} (${notification.oldQuantity} → ${notification.newQuantity})`;
-          className = 'notification-changed';
-          break;
         default:
           message = `📝 ${notification.type}: ${notification.name}`;
           className = 'notification-changed';
@@ -201,13 +187,11 @@ class MagazzinoManager {
       const day = formatDate(this.selectedDate);
       const notifDocId = `${week}_${day}`;
       
-      // Update main notification document
       await setDoc(doc(db, 'notifications', notifDocId), {
         unreadCount: 0,
         lastUpdate: Timestamp.now()
       }, { merge: true });
       
-      // Mark all entries as read
       const batch = [];
       for (const notification of this.notifications) {
         if (!notification.read) {
@@ -363,7 +347,6 @@ class MagazzinoManager {
         <div style="flex: 1;">
           <div style="font-weight: 600; margin-bottom: 0.25rem; ${product.checked ? 'text-decoration: line-through; opacity: 0.7;' : ''}">
             ${product.name}
-            ${product.important ? '<span class="important-badge">Importante</span>' : ''}
             ${product.unit ? `<span class="unit-badge">${product.unit}</span>` : ''}
           </div>
           <div style="font-size: 0.875rem; color: var(--text-secondary);">
