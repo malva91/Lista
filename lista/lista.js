@@ -32,7 +32,6 @@ class ListaManager {
     
     await this.loadData();
     await this.loadCurrentList();
-    this.renderProducts();
     this.renderExtras();
   }
   
@@ -54,7 +53,9 @@ class ListaManager {
       const { products, categories } = await productsLoader.loadProducts();
       this.products = products;
       this.categories = categories;
+      console.log('📊 Dati caricati in lista:', { products: this.products.length, categories: this.categories.length });
       this.renderCategoryFilters();
+      this.filterAndRenderProducts();
     } catch (error) {
       console.error('Errore caricamento dati:', error);
       this.showError('Errore nel caricamento dei dati');
@@ -230,6 +231,7 @@ class ListaManager {
       return matchesSearch && matchesCategory;
     });
 
+    console.log('🔍 Prodotti filtrati:', this.filteredProducts.length);
     this.renderProducts();
   }
 
@@ -242,6 +244,8 @@ class ListaManager {
     loading.classList.add('hidden');
     container.classList.remove('hidden');
     
+    console.log('🎨 Rendering prodotti:', this.filteredProducts.length);
+    
     container.innerHTML = '';
 
     // Group products by category
@@ -252,6 +256,8 @@ class ListaManager {
       }
       groupedProducts.get(product.categoryId).push(product);
     });
+
+    console.log('📂 Categorie con prodotti:', groupedProducts.size);
 
     // Render categories
     const categoryEntries = Array.from(groupedProducts.entries()).sort(([categoryIdA], [categoryIdB]) => {
@@ -267,6 +273,15 @@ class ListaManager {
         container.appendChild(categorySection);
       }
     });
+    
+    if (categoryEntries.length === 0) {
+      container.innerHTML = `
+        <div class="text-center p-4">
+          <p class="text-secondary">Nessun prodotto trovato</p>
+          <p class="text-muted">Prova a modificare i filtri di ricerca</p>
+        </div>
+      `;
+    }
   }
   
   createCategorySection(categoryId, products) {
