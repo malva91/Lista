@@ -729,6 +729,19 @@ class ListaManager {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
+      // Carica la lista esistente per confronto
+      let previousList = null;
+      if (isSubmit) {
+        try {
+          const existingDoc = await getDoc(doc(db, 'weeks', week, 'lists', day));
+          if (existingDoc.exists()) {
+            previousList = existingDoc.data();
+          }
+        } catch (error) {
+          console.warn('Errore caricamento lista precedente:', error);
+        }
+      }
+      
       if (!this.currentList) {
         this.currentList = { items: [], extras: [] };
       }
@@ -741,8 +754,10 @@ class ListaManager {
         this.currentList.status = 'submitted';
         this.currentList.version = Date.now(); // Versione per tracking modifiche
         
-        // Create notification for magazzino
-        await this.createSubmissionNotification();
+        // Crea notifiche solo se ci sono modifiche rispetto alla versione precedente
+        if (previousList && previousList.status === 'submitted') {
+          await this.createChangeNotifications(previousList, this.currentList);
+        }
       }
       
       await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
@@ -778,37 +793,143 @@ class ListaManager {
     }
   }
 
-  async createSubmissionNotification() {
+  async createChangeNotifications(previousList, newList) {
     try {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       const notifDocId = `${week}_${day}`;
       
-      const totalItems = (this.currentList.items?.length || 0) + (this.currentList.extras?.length || 0);
+      const notifications = [];
       
-      // Create notification entry
-      const notificationId = `submission_${Date.now()}`;
-      await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), {
-        type: 'listSubmitted',
-        timestamp: Timestamp.now(),
-        read: false,
-        data: {
-          itemsCount: this.currentList.items?.length || 0,
-          extrasCount: this.currentList.extras?.length || 0
+      // Confronta prodotti
+      const previousItems = new Map((previousList.items || []).map(item => [item.id, item.quantity]));
+      const newItems = new Map((newList.items || []).map(item => [item.id, item.quantity]));
+      
+      // Prodotti aggiunti
+      newItems.forEach((quantity, productId) => {
+        if (!previousItems.has(productId)) {
+          const product = this.products.find(p => p.id === productId);
+          if (product) {
+            notifications.push({
+              type: 'productAdded',
+              productId: productId,
+              productName: product.name,
+              quantity: quantity,
+              timestamp: Timestamp.now(),
+              read: false
+            });
+          }
         }
       });
       
-      // Update notification counter
-      const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
-      const currentUnread = notifDoc.exists() ? (notifDoc.data().unreadCount || 0) : 0;
+      // Prodotti rimossi
+      previousItems.forEach((quantity, productId) => {
+        if (!newItems.has(productId)) {
+          const product = this.products.find(p => p.id === productId);
+          if (product) {
+            notifications.push({
+              type: 'productRemoved',
+              productId: productId,
+              productName: product.name,
+              quantity: quantity,
+              timestamp: Timestamp.now(),
+              read: false
+            });
+          }
+        }
+      });
       
-      await setDoc(doc(db, 'notifications', notifDocId), {
-        unreadCount: currentUnread + 1,
-        lastUpdate: Timestamp.now()
-      }, { merge: true });
+      // Prodotti con quantità modificata
+      newItems.forEach((newQuantity, productId) => {
+        const previousQuantity = previousItems.get(productId);
+        if (previousQuantity && previousQuantity !== newQuantity) {
+          const product = this.products.find(p => p.id === productId);
+          if (product) {
+            notifications.push({
+              type: 'quantityChanged',
+              productId: productId,
+              productName: product.name,
+              oldQuantity: previousQuantity,
+              newQuantity: newQuantity,
+              timestamp: Timestamp.now(),
+              read: false
+            });
+          }
+        }
+      });
+      
+      // Confronta prodotti extra
+      const previousExtras = new Map((previousList.extras || []).map(extra => [extra.name, extra.quantity]));
+      const newExtras = new Map((newList.extras || []).map(extra => [extra.name, extra.quantity]));
+      
+      // Extra aggiunti
+      newExtras.forEach((quantity, name) => {
+        if (!previousExtras.has(name)) {
+          notifications.push({
+            type: 'extraAdded',
+            extraName: name,
+            quantity: quantity,
+            timestamp: Timestamp.now(),
+            read: false
+          });
+        }
+      });
+      
+      // Extra rimossi
+      previousExtras.forEach((quantity, name) => {
+        if (!newExtras.has(name)) {
+          notifications.push({
+            type: 'extraRemoved',
+            extraName: name,
+            quantity: quantity,
+            timestamp: Timestamp.now(),
+            read: false
+          });
+        }
+      });
+      
+      // Extra con quantità modificata
+      newExtras.forEach((newQuantity, name) => {
+        const previousQuantity = previousExtras.get(name);
+        if (previousQuantity && previousQuantity !== newQuantity) {
+          notifications.push({
+            type: 'extraQuantityChanged',
+            extraName: name,
+            oldQuantity: previousQuantity,
+            newQuantity: newQuantity,
+            timestamp: Timestamp.now(),
+            read: false
+          });
+        }
+      });
+      
+      // Salva le notifiche solo se ci sono modifiche
+      if (notifications.length > 0) {
+        console.log(`📝 Creazione ${notifications.length} notifiche per modifiche`);
+        
+        // Salva ogni notifica
+        for (const notification of notifications) {
+          const notificationId = `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), notification);
+        }
+        
+        // Aggiorna contatore notifiche
+        const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
+        const currentUnread = notifDoc.exists() ? (notifDoc.data().unreadCount || 0) : 0;
+        
+        await setDoc(doc(db, 'notifications', notifDocId), {
+          unreadCount: currentUnread + notifications.length,
+          lastUpdate: Timestamp.now()
+        }, { merge: true });
+        
+        showToast(`Lista aggiornata con ${notifications.length} modifiche`, 'success');
+      } else {
+        console.log('📝 Nessuna modifica rilevata, nessuna notifica creata');
+        showToast('Lista reinviata senza modifiche', 'info');
+      }
       
     } catch (error) {
-      console.error('Errore creazione notifica:', error);
+      console.error('Errore creazione notifiche:', error);
     }
   }
 

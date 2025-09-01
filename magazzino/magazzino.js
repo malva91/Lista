@@ -300,49 +300,59 @@ class MagazzinoManager {
       let className = '';
       
       switch (notification.type) {
-        case 'added':
+        case 'productAdded':
           message = `➕ Prodotto aggiunto`;
-          details = `${notification.name} - Qtà: ${notification.quantity}`;
+          details = `${notification.productName} - Qtà: ${notification.quantity}`;
           className = 'notification-added';
           break;
-        case 'removed':
+        case 'productRemoved':
           message = `➖ Prodotto rimosso`;
-          details = `${notification.name} - Qtà: ${notification.quantity}`;
+          details = `${notification.productName} - Qtà: ${notification.quantity}`;
           className = 'notification-removed';
           break;
-        case 'qtyChanged':
+        case 'quantityChanged':
           message = `🔄 Quantità modificata`;
-          details = `${notification.name}: ${notification.oldQuantity} → ${notification.newQuantity}`;
+          details = `${notification.productName}: ${notification.oldQuantity} → ${notification.newQuantity}`;
           className = 'notification-changed';
           break;
-        case 'listSubmitted':
-          message = `📝 Lista inviata`;
-          details = `${notification.data?.itemsCount || 0} prodotti + ${notification.data?.extrasCount || 0} extra`;
-          className = 'notification-success';
+        case 'extraAdded':
+          message = `➕ Extra aggiunto`;
+          details = `${notification.extraName} - Qtà: ${notification.quantity}`;
+          className = 'notification-added';
+          break;
+        case 'extraRemoved':
+          message = `➖ Extra rimosso`;
+          details = `${notification.extraName} - Qtà: ${notification.quantity}`;
+          className = 'notification-removed';
+          break;
+        case 'extraQuantityChanged':
+          message = `🔄 Extra modificato`;
+          details = `${notification.extraName}: ${notification.oldQuantity} → ${notification.newQuantity}`;
+          className = 'notification-changed';
           break;
         case 'productChecked':
           message = `✅ Prodotto preparato`;
-          details = notification.name;
+          details = notification.productName || notification.name;
           className = 'notification-success';
           break;
         case 'productUnchecked':
           message = `⏳ Da preparare`;
-          details = notification.name;
+          details = notification.productName || notification.name;
           className = 'notification-warning';
           break;
         case 'extraChecked':
           message = `✅ Extra preparato`;
-          details = notification.name;
+          details = notification.extraName || notification.name;
           className = 'notification-success';
           break;
         case 'extraUnchecked':
           message = `⏳ Extra da preparare`;
-          details = notification.name;
+          details = notification.extraName || notification.name;
           className = 'notification-warning';
           break;
         default:
-          message = `📝 Modifica`;
-          details = `${notification.type}: ${notification.name}`;
+          message = `📝 Modifica lista`;
+          details = `Tipo: ${notification.type}`;
           className = 'notification-changed';
       }
       
@@ -1055,14 +1065,22 @@ class MagazzinoManager {
         (type === 'product' ? 'productChecked' : 'extraChecked') :
         (type === 'product' ? 'productUnchecked' : 'extraUnchecked');
       
-      // Create notification entry
-      const notificationId = `${notificationType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), {
+      const notificationData = {
         type: notificationType,
-        name: productName,
         timestamp: Timestamp.now(),
         read: false
-      });
+      };
+      
+      // Usa il campo corretto per il nome
+      if (type === 'product') {
+        notificationData.productName = productName;
+      } else {
+        notificationData.extraName = productName;
+      }
+      
+      // Create notification entry
+      const notificationId = `${notificationType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), notificationData);
       
       // Update notification counter
       const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
