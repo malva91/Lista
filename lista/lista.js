@@ -212,19 +212,6 @@ class ListaManager {
       safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
     }
 
-    const showAllBtn = safeQuerySelector('#showAllBtn');
-    if (showAllBtn) {
-      safeAddEventListener(showAllBtn, 'click', () => {
-        this.selectedCategory = '';
-        this.searchTerm = '';
-        const searchInput = safeQuerySelector('#searchInput');
-        if (searchInput) searchInput.value = '';
-        this.filterAndRenderProducts();
-        this.updateCategoryFilters();
-        showToast(`Visualizzati tutti i ${this.products.length} prodotti`, 'success');
-      });
-    }
-
     // Extra products
     const addExtraBtn = safeQuerySelector('#addExtraBtn');
     if (addExtraBtn) {
@@ -506,14 +493,14 @@ class ListaManager {
 
   expandAllCategories() {
     this.collapsedCategories.clear();
-    this.updateCategoryVisibility();
+    this.renderProducts(); // Re-render to update all category states
     showToast('Tutte le categorie espanse', 'success');
   }
 
   collapseAllCategories() {
     const categoryIds = [...new Set(this.products.map(p => p.categoryId))];
     this.collapsedCategories = new Set(categoryIds);
-    this.updateCategoryVisibility();
+    this.renderProducts(); // Re-render to update all category states
     showToast('Tutte le categorie chiuse', 'success');
   }
 

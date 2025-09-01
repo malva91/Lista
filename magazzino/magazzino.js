@@ -90,6 +90,21 @@ class MagazzinoManager {
     if (markAllReadBtn) {
       safeAddEventListener(markAllReadBtn, 'click', () => this.markAllNotificationsRead());
     }
+
+    const clearNotificationsBtn = safeQuerySelector('#clearNotificationsBtn');
+    if (clearNotificationsBtn) {
+      safeAddEventListener(clearNotificationsBtn, 'click', () => this.clearAllNotifications());
+    }
+
+    const closeNotificationsBtn = safeQuerySelector('#closeNotificationsBtn');
+    if (closeNotificationsBtn) {
+      safeAddEventListener(closeNotificationsBtn, 'click', () => this.hideNotifications());
+    }
+
+    const showNotificationsBtn = safeQuerySelector('#showNotificationsBtn');
+    if (showNotificationsBtn) {
+      safeAddEventListener(showNotificationsBtn, 'click', () => this.toggleNotifications());
+    }
   }
 
   async loadCurrentList() {
@@ -123,6 +138,9 @@ class MagazzinoManager {
             if (!previousList && newData.status === 'submitted') {
               showToast('Nuova lista ricevuta!', 'success');
             }
+            
+            // Auto-cleanup old data
+            this.cleanupOldData();
           } else {
             this.currentList = null;
             this.showEmptyState();
@@ -345,6 +363,48 @@ class MagazzinoManager {
     const panel = safeQuerySelector('#notificationPanel');
     if (panel) {
       panel.classList.add('hidden');
+    }
+  }
+
+  toggleNotifications() {
+    const panel = safeQuerySelector('#notificationPanel');
+    if (panel) {
+      if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+      } else {
+        panel.classList.add('hidden');
+      }
+    }
+  }
+
+  async clearAllNotifications() {
+    if (!confirm('Eliminare tutte le notifiche? Questa azione non può essere annullata.')) {
+      return;
+    }
+    
+    try {
+      const week = getWeekString(this.selectedDate);
+      const day = formatDate(this.selectedDate);
+      const notifDocId = `${week}_${day}`;
+      
+      // Delete all notification entries
+      const entriesSnap = await getDocs(collection(db, 'notifications', notifDocId, 'entries'));
+      const deletePromises = entriesSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      
+      // Reset notification counter
+      await setDoc(doc(db, 'notifications', notifDocId), {
+        unreadCount: 0,
+        lastUpdate: Timestamp.now()
+      });
+      
+      this.notifications = [];
+      this.hideNotifications();
+      
+      showToast('Tutte le notifiche eliminate', 'success');
+    } catch (error) {
+      console.error('Errore eliminazione notifiche:', error);
+      showToast('Errore durante l\'eliminazione delle notifiche', 'error');
     }
   }
 
@@ -875,7 +935,7 @@ class MagazzinoManager {
 
   expandAllCategories() {
     this.collapsedCategories.clear();
-    this.updateCategoryVisibility();
+    this.renderChecklist(); // Re-render to update all category states
     showToast('Tutte le categorie espanse', 'success');
   }
 
@@ -891,7 +951,7 @@ class MagazzinoManager {
     }).filter(Boolean))];
     
     this.collapsedCategories = new Set(categoryIds);
-    this.updateCategoryVisibility();
+    this.renderChecklist(); // Re-render to update all category states
     showToast('Tutte le categorie chiuse', 'success');
   }
 
@@ -1015,6 +1075,64 @@ class MagazzinoManager {
       
     } catch (error) {
       console.error('Errore creazione notifica:', error);
+    }
+  }
+
+  async cleanupOldData() {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 2); // 2 giorni fa
+      
+      // Cleanup old weeks
+      const weeksSnap = await getDocs(collection(db, 'weeks'));
+      const deletePromises = [];
+      
+      weeksSnap.docs.forEach(weekDoc => {
+        const weekId = weekDoc.id;
+        const [year, weekNum] = weekId.split('-W');
+        
+        // Calculate date from week number
+        const weekDate = new Date(parseInt(year), 0, 1 + (parseInt(weekNum.replace('W', '')) - 1) * 7);
+        
+        if (weekDate < cutoffDate) {
+          deletePromises.push(this.deleteWeekData(weekId));
+        }
+      });
+      
+      // Cleanup old notifications
+      const notificationsSnap = await getDocs(collection(db, 'notifications'));
+      notificationsSnap.docs.forEach(notifDoc => {
+        const notifId = notifDoc.id;
+        const [year, weekNum, day] = notifId.split('_');
+        
+        if (year && weekNum && day) {
+          const notifDate = new Date(`${year}-${weekNum.replace('W', '')}-${day}`);
+          if (notifDate < cutoffDate) {
+            deletePromises.push(deleteDoc(notifDoc.ref));
+          }
+        }
+      });
+      
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+        console.log(`🧹 Eliminati ${deletePromises.length} documenti obsoleti`);
+      }
+    } catch (error) {
+      console.error('Errore cleanup dati:', error);
+    }
+  }
+
+  async deleteWeekData(weekId) {
+    try {
+      // Delete all lists in the week
+      const listsSnap = await getDocs(collection(db, 'weeks', weekId, 'lists'));
+      const deletePromises = listsSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      
+      // Delete the week document
+      await deleteDoc(doc(db, 'weeks', weekId));
+    } catch (error) {
+      console.error(`Errore eliminazione settimana ${weekId}:`, error);
     }
   }
 
