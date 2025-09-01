@@ -4,7 +4,7 @@
  */
 
 import { db } from './firebase.js?v=1.3.0';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 class ProductsLoader {
   constructor() {
@@ -13,6 +13,8 @@ class ProductsLoader {
     this.isLoaded = false;
     this.loadPromise = null;
     this.useFirestore = false; // Flag per usare Firestore invece del JSON
+    this.listeners = new Map(); // Store real-time listeners
+    this.callbacks = new Set(); // Store update callbacks
   }
 
   async loadProducts() {
@@ -41,6 +43,7 @@ class ProductsLoader {
         this.products = firestoreData.products;
         this.categories = firestoreData.categories;
         this.useFirestore = true;
+        this.setupRealtimeSync();
       } else {
         // Fallback al JSON statico
         console.log('📄 Caricamento da JSON statico...');
@@ -64,6 +67,62 @@ class ProductsLoader {
       this.loadPromise = null;
       throw new Error(`Impossibile caricare il catalogo prodotti: ${error.message}`);
     }
+  }
+
+  setupRealtimeSync() {
+    if (!this.useFirestore) return;
+    
+    // Setup real-time listeners for categories and products
+    const categoriesListener = onSnapshot(
+      collection(db, 'prodottiCatalogo', 'data', 'categories'),
+      (snapshot) => {
+        const categories = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).filter(cat => cat.active !== false);
+        
+        this.categories = categories;
+        this.notifyCallbacks('categories', categories);
+      },
+      (error) => {
+        console.error('Errore listener categorie:', error);
+      }
+    );
+    
+    const productsListener = onSnapshot(
+      collection(db, 'prodottiCatalogo', 'data', 'products'),
+      (snapshot) => {
+        const products = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).filter(prod => prod.active !== false);
+        
+        this.products = products;
+        this.notifyCallbacks('products', products);
+      },
+      (error) => {
+        console.error('Errore listener prodotti:', error);
+      }
+    );
+    
+    this.listeners.set('categories', categoriesListener);
+    this.listeners.set('products', productsListener);
+  }
+
+  // Subscribe to real-time updates
+  onUpdate(callback) {
+    this.callbacks.add(callback);
+    return () => this.callbacks.delete(callback);
+  }
+
+  notifyCallbacks(type, data) {
+    this.callbacks.forEach(callback => {
+      try {
+        callback(type, data);
+      } catch (error) {
+        console.error('Errore callback update:', error);
+      }
+    });
   }
 
   async loadFromFirestore() {
@@ -251,7 +310,19 @@ class ProductsLoader {
   async reload() {
     this.isLoaded = false;
     this.loadPromise = null;
+    this.cleanup();
     return this.loadProducts();
+  }
+
+  cleanup() {
+    // Clean up listeners
+    this.listeners.forEach(listener => {
+      if (typeof listener === 'function') {
+        listener();
+      }
+    });
+    this.listeners.clear();
+    this.callbacks.clear();
   }
 
   // Statistiche

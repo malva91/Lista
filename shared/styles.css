@@ -779,6 +779,7 @@ body {
   z-index: 98;
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow-lg);
+  transition: all 0.3s ease;
 }
 
 .notification-header {
@@ -795,6 +796,20 @@ body {
   margin: 0;
 }
 
+.notification-header .flex {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.notification-header .btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--text-xs);
+  min-height: 32px;
+  white-space: nowrap;
+}
+
 .notification-badge {
   background: var(--accent-error);
   color: white;
@@ -809,6 +824,7 @@ body {
 .notification-list {
   max-height: 200px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .notification-item {
@@ -820,11 +836,17 @@ body {
   box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
   font-size: var(--text-sm);
+  position: relative;
+  cursor: pointer;
 }
 
 .notification-item:hover {
   transform: translateX(4px);
   box-shadow: var(--shadow-md);
+}
+
+.notification-item:last-child {
+  margin-bottom: 0;
 }
 
 .notification-message {

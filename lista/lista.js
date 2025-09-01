@@ -854,6 +854,54 @@ class ListaManager {
     showToast(message, 'error');
   }
 
+  async cleanupOldData() {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 2); // 2 giorni fa
+      
+      // Cleanup old weeks (run only occasionally to avoid performance issues)
+      if (Math.random() < 0.1) { // 10% chance to run cleanup
+        const weeksSnap = await getDocs(collection(db, 'weeks'));
+        const deletePromises = [];
+        
+        weeksSnap.docs.forEach(weekDoc => {
+          const weekId = weekDoc.id;
+          const [year, weekNum] = weekId.split('-W');
+          
+          if (year && weekNum) {
+            // Calculate date from week number
+            const weekDate = new Date(parseInt(year), 0, 1 + (parseInt(weekNum.replace('W', '')) - 1) * 7);
+            
+            if (weekDate < cutoffDate) {
+              deletePromises.push(this.deleteWeekData(weekId));
+            }
+          }
+        });
+        
+        if (deletePromises.length > 0) {
+          await Promise.all(deletePromises);
+          console.log(`🧹 Eliminati ${deletePromises.length} documenti obsoleti`);
+        }
+      }
+    } catch (error) {
+      console.error('Errore cleanup dati:', error);
+    }
+  }
+
+  async deleteWeekData(weekId) {
+    try {
+      // Delete all lists in the week
+      const listsSnap = await getDocs(collection(db, 'weeks', weekId, 'lists'));
+      const deletePromises = listsSnap.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      
+      // Delete the week document
+      await deleteDoc(doc(db, 'weeks', weekId));
+    } catch (error) {
+      console.error(`Errore eliminazione settimana ${weekId}:`, error);
+    }
+  }
+
   // Cleanup when page unloads
   destroy() {
     if (this.listListener) {
