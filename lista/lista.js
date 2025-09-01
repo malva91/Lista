@@ -123,6 +123,55 @@ class ListaManager {
     return clientId;
   }
 
+  detectAndNotifyChanges(oldList, newList) {
+    // Detect product quantity changes
+    const oldItems = new Map((oldList.items || []).map(item => [item.id, item.quantity]));
+    const newItems = new Map((newList.items || []).map(item => [item.id, item.quantity]));
+    
+    // Check for added products
+    newItems.forEach((quantity, productId) => {
+      if (!oldItems.has(productId)) {
+        const product = this.products.find(p => p.id === productId);
+        if (product) {
+          showToast(`➕ ${product.name} (${quantity})`, 'success', 2000);
+        }
+      } else if (oldItems.get(productId) !== quantity) {
+        const product = this.products.find(p => p.id === productId);
+        if (product) {
+          showToast(`🔄 ${product.name}: ${oldItems.get(productId)} → ${quantity}`, 'info', 2500);
+        }
+      }
+    });
+    
+    // Check for removed products
+    oldItems.forEach((quantity, productId) => {
+      if (!newItems.has(productId)) {
+        const product = this.products.find(p => p.id === productId);
+        if (product) {
+          showToast(`➖ ${product.name} rimosso`, 'warning', 2000);
+        }
+      }
+    });
+    
+    // Check for extra changes
+    const oldExtras = new Map((oldList.extras || []).map(extra => [extra.name, extra.quantity]));
+    const newExtras = new Map((newList.extras || []).map(extra => [extra.name, extra.quantity]));
+    
+    newExtras.forEach((quantity, name) => {
+      if (!oldExtras.has(name)) {
+        showToast(`➕ Extra: ${name} (${quantity})`, 'success', 2000);
+      } else if (oldExtras.get(name) !== quantity) {
+        showToast(`🔄 Extra ${name}: ${oldExtras.get(name)} → ${quantity}`, 'info', 2500);
+      }
+    });
+    
+    oldExtras.forEach((quantity, name) => {
+      if (!newExtras.has(name)) {
+        showToast(`➖ Extra ${name} rimosso`, 'warning', 2000);
+      }
+    });
+  }
+
   setupDateSelector() {
     const dateSelector = safeQuerySelector('#dateSelector');
     const currentDateEl = safeQuerySelector('#currentDate');

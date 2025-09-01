@@ -118,6 +118,7 @@ export function getDayName(date) {
 
 // Toast notifications
 let toastContainer = null;
+let activeToasts = [];
 
 function createToastContainer() {
   if (!toastContainer) {
@@ -125,51 +126,77 @@ function createToastContainer() {
     toastContainer.id = 'toast-container';
     toastContainer.style.cssText = `
       position: fixed;
-      top: 20px;
-      left: 20px;
-      right: 20px;
+      top: calc(var(--safe-area-top) + 10px);
+      left: 10px;
+      right: 10px;
       z-index: 10000;
       pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
     `;
     document.body.appendChild(toastContainer);
   }
   return toastContainer;
 }
 
-export function showToast(message, type = 'info', duration = 3000) {
+export function showToast(message, type = 'info', duration = 2500) {
   const container = createToastContainer();
+  
+  // Limit number of active toasts
+  if (activeToasts.length >= 3) {
+    const oldestToast = activeToasts.shift();
+    if (oldestToast && oldestToast.parentNode) {
+      oldestToast.classList.remove('toast-show');
+      setTimeout(() => {
+        if (oldestToast.parentNode) {
+          oldestToast.parentNode.removeChild(oldestToast);
+        }
+      }, 300);
+    }
+  }
   
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   toast.textContent = message;
   toast.style.pointerEvents = 'auto';
+  toast.style.cssText += `
+    max-width: 280px;
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+    line-height: 1.4;
+    word-break: break-word;
+  `;
   
   container.appendChild(toast);
+  activeToasts.push(toast);
   
   // Trigger animation
   requestAnimationFrame(() => {
     toast.classList.add('toast-show');
   });
   
-  // Auto remove
-  setTimeout(() => {
+  const removeToast = () => {
+    const index = activeToasts.indexOf(toast);
+    if (index > -1) {
+      activeToasts.splice(index, 1);
+    }
     toast.classList.remove('toast-show');
     setTimeout(() => {
       if (toast.parentNode) {
         toast.parentNode.removeChild(toast);
       }
-    }, 400);
+    }, 300);
+  };
+  
+  // Auto remove
+  setTimeout(() => {
+    removeToast();
   }, duration);
   
   // Click to dismiss
-  toast.addEventListener('click', () => {
-    toast.classList.remove('toast-show');
-    setTimeout(() => {
-      if (toast.parentNode) {
-        toast.parentNode.removeChild(toast);
-      }
-    }, 400);
-  });
+  toast.addEventListener('click', removeToast);
 }
 
 // Debounce utility
