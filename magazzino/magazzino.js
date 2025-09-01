@@ -14,6 +14,9 @@ class MagazzinoManager {
     this.products = [];
     this.currentList = null;
     this.notifications = [];
+    this.collapsedCategories = new Set();
+    this.listListener = null;
+    this.notificationListener = null;
     
     this.init();
   }
@@ -62,6 +65,27 @@ class MagazzinoManager {
   }
 
   setupEventListeners() {
+    // Global controls
+    const expandAllBtn = safeQuerySelector('#expandAllBtn');
+    if (expandAllBtn) {
+      safeAddEventListener(expandAllBtn, 'click', () => this.expandAllCategories());
+    }
+
+    const collapseAllBtn = safeQuerySelector('#collapseAllBtn');
+    if (collapseAllBtn) {
+      safeAddEventListener(collapseAllBtn, 'click', () => this.collapseAllCategories());
+    }
+
+    const markAllPreparedBtn = safeQuerySelector('#markAllPreparedBtn');
+    if (markAllPreparedBtn) {
+      safeAddEventListener(markAllPreparedBtn, 'click', () => this.markAllPrepared());
+    }
+
+    const markAllUnpreparedBtn = safeQuerySelector('#markAllUnpreparedBtn');
+    if (markAllUnpreparedBtn) {
+      safeAddEventListener(markAllUnpreparedBtn, 'click', () => this.markAllUnprepared());
+    }
+
     const markAllReadBtn = safeQuerySelector('#markAllReadBtn');
     if (markAllReadBtn) {
       safeAddEventListener(markAllReadBtn, 'click', () => this.markAllNotificationsRead());
@@ -70,9 +94,44 @@ class MagazzinoManager {
 
   async loadCurrentList() {
     try {
+      // Clean up existing listener
+      if (this.listListener) {
+        this.listListener();
+        this.listListener = null;
+      }
+
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
+      // Setup real-time listener for the list
+      this.listListener = onSnapshot(
+        doc(db, 'weeks', week, 'lists', day),
+        (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const newData = docSnapshot.data();
+            const hadList = this.currentList !== null;
+            this.currentList = newData;
+            
+            this.renderChecklist();
+            
+            // Show notification if list was just submitted
+            if (!hadList && newData.status === 'submitted') {
+              showToast('Nuova lista ricevuta!', 'success');
+            }
+          } else {
+            this.currentList = null;
+            this.showEmptyState();
+          }
+          
+          document.getElementById('loadingList').classList.add('hidden');
+        },
+        (error) => {
+          console.error('Errore listener lista:', error);
+          this.showError('Errore nel caricamento della lista');
+          document.getElementById('loadingList').classList.add('hidden');
+        }
+      );
+
       const listDoc = await getDoc(doc(db, 'weeks', week, 'lists', day));
       
       if (listDoc.exists()) {
@@ -93,10 +152,41 @@ class MagazzinoManager {
 
   async loadNotifications() {
     try {
+      // Clean up existing notification listener
+      if (this.notificationListener) {
+        this.notificationListener();
+        this.notificationListener = null;
+      }
+
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       const notifDocId = `${week}_${day}`;
       
+      // Setup real-time listener for notifications
+      this.notificationListener = onSnapshot(
+        doc(db, 'notifications', notifDocId),
+        async (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const notifData = docSnapshot.data();
+            
+            // Load notification entries
+            const entriesSnap = await getDocs(collection(db, 'notifications', notifDocId, 'entries'));
+            this.notifications = entriesSnap.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })).sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+            
+            this.renderNotifications(notifData.unreadCount || 0);
+          } else {
+            this.notifications = [];
+            this.hideNotifications();
+          }
+        },
+        (error) => {
+          console.error('Errore listener notifiche:', error);
+        }
+      );
+
       const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
       
       if (notifDoc.exists()) {
@@ -301,6 +391,7 @@ class MagazzinoManager {
     if (!category) return null;
 
     products.sort((a, b) => a.name.localeCompare(b.name));
+    const isCollapsed = this.collapsedCategories.has(categoryId);
     
     const categorySection = document.createElement('div');
     categorySection.className = 'category-section';
@@ -314,13 +405,16 @@ class MagazzinoManager {
     categoryHeader.className = 'category-header';
     categoryHeader.style.cssText = `
       color: ${category.colorHex};
+      cursor: pointer;
+      user-select: none;
       padding: 0.75rem 1rem;
       background: ${category.colorHex}08;
-      border-bottom: 1px solid ${category.colorHex}20;
+      border-bottom: ${isCollapsed ? 'none' : `1px solid ${category.colorHex}20`};
       font-weight: 600;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      transition: all 0.3s ease;
     `;
     
     const checkedCount = products.filter(p => p.checked).length;
@@ -328,16 +422,26 @@ class MagazzinoManager {
     
     categoryHeader.innerHTML = `
       <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="transition: transform 0.3s; ${isCollapsed ? 'transform: rotate(-90deg);' : ''}">▼</span>
         <span>📂</span>
         <span>${category.name}</span>
       </div>
       <span style="font-size: 0.8rem; opacity: 0.8;">${checkedCount}/${totalCount}</span>
     `;
     
+    categoryHeader.addEventListener('click', () => {
+      this.toggleCategory(categoryId);
+    });
+    
     categorySection.appendChild(categoryHeader);
 
     const categoryContent = document.createElement('div');
-    categoryContent.style.padding = '0.5rem';
+    categoryContent.className = 'category-content';
+    categoryContent.style.cssText = `
+      transition: all 0.3s ease;
+      overflow: hidden;
+      ${isCollapsed ? 'max-height: 0; opacity: 0; padding: 0;' : 'max-height: 2000px; opacity: 1; padding: 0.5rem;'}
+    `;
     
     const productsGrid = document.createElement('div');
     productsGrid.style.display = 'grid';
