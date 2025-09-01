@@ -629,12 +629,9 @@ class MagazzinoManager {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
-      this.currentList.lastModifiedBy = this.getClientId();
-      this.currentList.updatedAt = Timestamp.now();
-      
       await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
       
-      // Don't show toast for individual saves, only for bulk operations
+      showToast('Checklist aggiornata', 'success');
     } catch (error) {
       console.error('Errore salvataggio checklist:', error);
       showToast('Errore durante il salvataggio', 'error');
@@ -657,6 +654,216 @@ class MagazzinoManager {
       setTimeout(() => errorEl.classList.add('hidden'), 5000);
     }
     showToast(message, 'error');
+  }
+
+  // Category collapse/expand functionality
+  toggleCategory(categoryId) {
+    if (this.collapsedCategories.has(categoryId)) {
+      this.collapsedCategories.delete(categoryId);
+    } else {
+      this.collapsedCategories.add(categoryId);
+    }
+    
+    this.updateCategoryVisibility();
+  }
+  
+  updateCategoryVisibility() {
+    const categorySections = document.querySelectorAll('.category-section');
+    categorySections.forEach(section => {
+      const categoryHeader = section.querySelector('.category-header');
+      if (!categoryHeader) return;
+
+      // Find category ID from the first product in this section
+      const firstCheckbox = section.querySelector('input[data-product-id]');
+      if (!firstCheckbox) return;
+
+      const productId = firstCheckbox.dataset.productId;
+      const product = this.products.find(p => p.id === productId);
+      if (!product) return;
+
+      const categoryId = product.categoryId;
+      const isCollapsed = this.collapsedCategories.has(categoryId);
+      const content = section.querySelector('.category-content');
+      const toggleIcon = categoryHeader.querySelector('span');
+
+      if (content && toggleIcon) {
+        if (isCollapsed) {
+          content.style.maxHeight = '0';
+          content.style.opacity = '0';
+          content.style.padding = '0';
+          toggleIcon.style.transform = 'rotate(-90deg)';
+        } else {
+          content.style.maxHeight = '2000px';
+          content.style.opacity = '1';
+          content.style.padding = '0.5rem';
+          toggleIcon.style.transform = '';
+        }
+      }
+    });
+  }
+
+  expandAllCategories() {
+    this.collapsedCategories.clear();
+    this.updateCategoryVisibility();
+    showToast('Tutte le categorie espanse', 'success');
+  }
+
+  collapseAllCategories() {
+    if (!this.currentList || !this.currentList.items) {
+      showToast('Nessuna lista da chiudere', 'info');
+      return;
+    }
+    
+    const categoryIds = [...new Set(this.currentList.items.map(item => {
+      const product = this.products.find(p => p.id === item.id);
+      return product ? product.categoryId : null;
+    }).filter(Boolean))];
+    
+    this.collapsedCategories = new Set(categoryIds);
+    this.updateCategoryVisibility();
+    showToast('Tutte le categorie chiuse', 'success');
+  }
+
+  async markAllPrepared() {
+    if (!this.currentList || (!this.currentList.items?.length && !this.currentList.extras?.length)) {
+      showToast('Nessuna lista da completare', 'info');
+      return;
+    }
+    
+    if (!confirm('Segnare tutti i prodotti come preparati?')) {
+      return;
+    }
+    
+    try {
+      let changedCount = 0;
+      
+      // Mark all products as checked
+      if (this.currentList.items) {
+        this.currentList.items.forEach(item => {
+          if (!item.checked) {
+            item.checked = true;
+            changedCount++;
+          }
+        });
+      }
+      
+      // Mark all extras as checked
+      if (this.currentList.extras) {
+        this.currentList.extras.forEach(extra => {
+          if (!extra.checked) {
+            extra.checked = true;
+            changedCount++;
+          }
+        });
+      }
+      
+      if (changedCount > 0) {
+        await this.saveChecklist();
+        showToast(`${changedCount} prodotti segnati come preparati`, 'success');
+      } else {
+        showToast('Tutti i prodotti sono già preparati', 'info');
+      }
+    } catch (error) {
+      console.error('Errore completamento lista:', error);
+      showToast('Errore durante il completamento', 'error');
+    }
+  }
+
+  async markAllUnprepared() {
+    if (!this.currentList || (!this.currentList.items?.length && !this.currentList.extras?.length)) {
+      showToast('Nessuna lista da resettare', 'info');
+      return;
+    }
+    
+    if (!confirm('Segnare tutti i prodotti come non preparati?')) {
+      return;
+    }
+    
+    try {
+      let changedCount = 0;
+      
+      // Mark all products as unchecked
+      if (this.currentList.items) {
+        this.currentList.items.forEach(item => {
+          if (item.checked) {
+            item.checked = false;
+            changedCount++;
+          }
+        });
+      }
+      
+      // Mark all extras as unchecked
+      if (this.currentList.extras) {
+        this.currentList.extras.forEach(extra => {
+          if (extra.checked) {
+            extra.checked = false;
+            changedCount++;
+          }
+        });
+      }
+      
+      if (changedCount > 0) {
+        await this.saveChecklist();
+        showToast(`${changedCount} prodotti segnati come non preparati`, 'warning');
+      } else {
+        showToast('Tutti i prodotti sono già non preparati', 'info');
+      }
+    } catch (error) {
+      console.error('Errore reset lista:', error);
+      showToast('Errore durante il reset', 'error');
+    }
+  }
+
+  async createCheckNotification(productName, checked, type) {
+    try {
+      const week = getWeekString(this.selectedDate);
+      const day = formatDate(this.selectedDate);
+      const notifDocId = `${week}_${day}`;
+      
+      const notificationType = checked ? 
+        (type === 'product' ? 'productChecked' : 'extraChecked') :
+        (type === 'product' ? 'productUnchecked' : 'extraUnchecked');
+      
+      // Create notification entry
+      const notificationId = `${notificationType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), {
+        type: notificationType,
+        name: productName,
+        timestamp: Timestamp.now(),
+        read: false
+      });
+      
+      // Update notification counter
+      const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
+      const currentUnread = notifDoc.exists() ? (notifDoc.data().unreadCount || 0) : 0;
+      
+      await setDoc(doc(db, 'notifications', notifDocId), {
+        unreadCount: currentUnread + 1,
+        lastUpdate: Timestamp.now()
+      }, { merge: true });
+      
+    } catch (error) {
+      console.error('Errore creazione notifica:', error);
+    }
+  }
+
+  getClientId() {
+    let clientId = localStorage.getItem('clientId');
+    if (!clientId) {
+      clientId = 'client_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('clientId', clientId);
+    }
+    return clientId;
+  }
+
+  // Cleanup when page unloads
+  destroy() {
+    if (this.listListener) {
+      this.listListener();
+    }
+    if (this.notificationListener) {
+      this.notificationListener();
+    }
   }
 }
 
