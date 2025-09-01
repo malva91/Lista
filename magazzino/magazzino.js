@@ -157,6 +157,26 @@ class MagazzinoManager {
           message = `🔄 Modificato: ${notification.name} (${notification.oldQuantity} → ${notification.newQuantity})`;
           className = 'notification-changed';
           break;
+        case 'listSubmitted':
+          message = `📝 ${notification.message}`;
+          className = 'notification-success';
+          break;
+        case 'productChecked':
+          message = `✅ Preparato: ${notification.name}`;
+          className = 'notification-success';
+          break;
+        case 'productUnchecked':
+          message = `⏳ Da preparare: ${notification.name}`;
+          className = 'notification-warning';
+          break;
+        case 'extraChecked':
+          message = `✅ Extra preparato: ${notification.name}`;
+          className = 'notification-success';
+          break;
+        case 'extraUnchecked':
+          message = `⏳ Extra da preparare: ${notification.name}`;
+          className = 'notification-warning';
+          break;
         default:
           message = `📝 ${notification.type}: ${notification.name}`;
           className = 'notification-changed';
@@ -183,6 +203,11 @@ class MagazzinoManager {
 
   async markAllNotificationsRead() {
     try {
+      if (this.notifications.length === 0) {
+        showToast('Nessuna notifica da segnare', 'info');
+        return;
+      }
+      
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       const notifDocId = `${week}_${day}`;
@@ -196,8 +221,7 @@ class MagazzinoManager {
       for (const notification of this.notifications) {
         if (!notification.read) {
           batch.push(
-            setDoc(doc(db, 'notifications', notifDocId, 'entries', notification.id), {
-              ...notification,
+            updateDoc(doc(db, 'notifications', notifDocId, 'entries', notification.id), {
               read: true
             })
           );
@@ -206,7 +230,6 @@ class MagazzinoManager {
       
       await Promise.all(batch);
       
-      await this.loadNotifications();
       showToast('Tutte le notifiche segnate come lette', 'success');
     } catch (error) {
       console.error('Errore aggiornamento notifiche:', error);

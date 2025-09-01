@@ -833,6 +833,14 @@ body {
   border-color: var(--accent-warning);
 }
 
+.notification-success {
+  border-color: var(--accent-success);
+}
+
+.notification-warning {
+  border-color: var(--accent-warning);
+}
+
 .notification-item.read {
   opacity: 0.6;
   background: var(--bg-secondary);

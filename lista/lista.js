@@ -1,6 +1,6 @@
 import { db } from '../shared/firebase.js?v=1.3.0';
 import { 
-  collection, doc, getDocs, getDoc, setDoc, deleteDoc,
+  collection, doc, getDocs, getDoc, setDoc, deleteDoc, onSnapshot,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.3.0';
@@ -17,6 +17,8 @@ class ListaManager {
     this.selectedCategory = '';
     this.searchTerm = '';
     this.collapsedCategories = new Set();
+    this.listListener = null;
+    this.isUpdatingFromFirestore = false;
     
     this.init();
   }
@@ -33,6 +35,7 @@ class ListaManager {
     await this.loadData();
     await this.loadCurrentList();
     this.renderExtras();
+    this.setupRealtimeSync();
   }
   
   showLoadingState() {
@@ -62,6 +65,64 @@ class ListaManager {
     }
   }
 
+  setupRealtimeSync() {
+    // Setup real-time listener for current list
+    this.updateRealtimeListener();
+  }
+
+  updateRealtimeListener() {
+    // Clean up existing listener
+    if (this.listListener) {
+      this.listListener();
+      this.listListener = null;
+    }
+
+    const week = getWeekString(this.selectedDate);
+    const day = formatDate(this.selectedDate);
+    
+    // Setup new listener
+    this.listListener = onSnapshot(
+      doc(db, 'weeks', week, 'lists', day),
+      (docSnapshot) => {
+        if (this.isUpdatingFromFirestore) return;
+        
+        if (docSnapshot.exists()) {
+          const newData = docSnapshot.data();
+          
+          // Check if this is a remote update (not from this client)
+          if (newData.lastModifiedBy !== this.getClientId()) {
+            console.log('📡 Aggiornamento remoto ricevuto');
+            this.currentList = newData;
+            this.renderProducts();
+            this.renderExtras();
+            showToast('Lista aggiornata da remoto', 'info');
+          }
+        } else {
+          // List was deleted remotely
+          if (this.currentList && (this.currentList.items?.length > 0 || this.currentList.extras?.length > 0)) {
+            console.log('📡 Lista eliminata da remoto');
+            this.currentList = { items: [], extras: [] };
+            this.renderProducts();
+            this.renderExtras();
+            showToast('Lista eliminata da remoto', 'warning');
+          }
+        }
+      },
+      (error) => {
+        console.error('Errore listener real-time:', error);
+      }
+    );
+  }
+
+  getClientId() {
+    let clientId = localStorage.getItem('clientId');
+    if (!clientId) {
+      clientId = 'client_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('clientId', clientId);
+    }
+    return clientId;
+  }
+
   setupDateSelector() {
     const dateSelector = safeQuerySelector('#dateSelector');
     const currentDateEl = safeQuerySelector('#currentDate');
@@ -75,6 +136,7 @@ class ListaManager {
       this.selectedDate = new Date(e.target.value);
       currentDateEl.textContent = `${getDayName(this.selectedDate)} ${formatDate(this.selectedDate)}`;
       this.loadCurrentList();
+      this.updateRealtimeListener();
     });
   }
 
@@ -626,6 +688,8 @@ class ListaManager {
 
   async saveList(isSubmit = false) {
     try {
+      this.isUpdatingFromFirestore = true;
+      
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
@@ -634,9 +698,14 @@ class ListaManager {
       }
       
       this.currentList.updatedAt = Timestamp.now();
+      this.currentList.lastModifiedBy = this.getClientId();
       
       if (isSubmit) {
         this.currentList.submittedAt = Timestamp.now();
+        this.currentList.status = 'submitted';
+        
+        // Create notification for magazzino
+        await this.createSubmissionNotification();
       }
       
       await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
@@ -651,8 +720,13 @@ class ListaManager {
       const message = isSubmit ? 'Lista inviata con successo!' : 'Bozza salvata!';
       showToast(message, 'success');
       
+      setTimeout(() => {
+        this.isUpdatingFromFirestore = false;
+      }, 1000);
+      
     } catch (error) {
       console.error('Errore salvataggio:', error);
+      this.isUpdatingFromFirestore = false;
       
       // Fallback to localStorage
       try {
@@ -667,12 +741,49 @@ class ListaManager {
     }
   }
 
+  async createSubmissionNotification() {
+    try {
+      const week = getWeekString(this.selectedDate);
+      const day = formatDate(this.selectedDate);
+      const notifDocId = `${week}_${day}`;
+      
+      const totalItems = (this.currentList.items?.length || 0) + (this.currentList.extras?.length || 0);
+      
+      // Create notification entry
+      const notificationId = `submission_${Date.now()}`;
+      await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), {
+        type: 'listSubmitted',
+        message: `Lista inviata con ${totalItems} prodotti`,
+        timestamp: Timestamp.now(),
+        read: false,
+        data: {
+          itemsCount: this.currentList.items?.length || 0,
+          extrasCount: this.currentList.extras?.length || 0
+        }
+      });
+      
+      // Update notification counter
+      const notifDoc = await getDoc(doc(db, 'notifications', notifDocId));
+      const currentUnread = notifDoc.exists() ? (notifDoc.data().unreadCount || 0) : 0;
+      
+      await setDoc(doc(db, 'notifications', notifDocId), {
+        unreadCount: currentUnread + 1,
+        lastUpdate: Timestamp.now()
+      }, { merge: true });
+      
+    } catch (error) {
+      console.error('Errore creazione notifica:', error);
+    }
+  }
+
   async deleteCurrentList() {
     if (!confirm('Sei sicuro di voler eliminare la lista corrente?')) {
       return;
     }
     
     try {
+      this.isUpdatingFromFirestore = true;
+      
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
@@ -686,8 +797,13 @@ class ListaManager {
       this.renderExtras();
       
       showToast('Lista eliminata con successo', 'success');
+      
+      setTimeout(() => {
+        this.isUpdatingFromFirestore = false;
+      }, 500);
     } catch (error) {
       console.error('Errore eliminazione lista:', error);
+      this.isUpdatingFromFirestore = false;
       showToast('Errore durante l\'eliminazione della lista', 'error');
     }
   }
@@ -700,6 +816,13 @@ class ListaManager {
       setTimeout(() => errorEl.classList.add('hidden'), 5000);
     }
     showToast(message, 'error');
+  }
+
+  // Cleanup when page unloads
+  destroy() {
+    if (this.listListener) {
+      this.listListener();
+    }
   }
 }
 
