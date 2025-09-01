@@ -137,15 +137,6 @@ class CatalogoManager {
     }
 
     // Add category/product buttons
-    const addCategoryBtn = safeQuerySelector('#addCategoryBtn');
-    if (addCategoryBtn) {
-      safeAddEventListener(addCategoryBtn, 'click', () => this.showAddCategoryForm());
-    }
-
-    const addProductBtn = safeQuerySelector('#addProductBtn');
-    if (addProductBtn) {
-      safeAddEventListener(addProductBtn, 'click', () => this.showAddProductForm());
-    }
   }
 
   switchView(view) {
@@ -313,36 +304,12 @@ class CatalogoManager {
         <span>📂</span>
         <span style="font-weight: 600;">${category.name}</span>
       </div>
-      <div style="display: flex; align-items: center; gap: 0.5rem;">
-        <span style="font-size: 0.8rem; opacity: 0.8;">${products.length}</span>
-        <button class="btn-icon btn-edit" data-category-id="${category.id}" style="width: 32px; height: 32px;">✏️</button>
-        <button class="btn-icon btn-delete" data-category-id="${category.id}" style="width: 32px; height: 32px;">🗑️</button>
-      </div>
+      <span style="font-size: 0.8rem; opacity: 0.8;">${products.length}</span>
     `;
 
-    categoryHeader.addEventListener('click', (e) => {
-      if (!e.target.closest('.btn-icon')) {
-        this.toggleCategory(categoryId);
-      }
+    categoryHeader.addEventListener('click', () => {
+      this.toggleCategory(categoryId);
     });
-
-    // Add event listeners for edit/delete buttons
-    const editBtn = categoryHeader.querySelector('.btn-edit');
-    const deleteBtn = categoryHeader.querySelector('.btn-delete');
-
-    if (editBtn) {
-      editBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.editCategory(category.id);
-      });
-    }
-
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.deleteCategory(category.id);
-      });
-    }
 
     categorySection.appendChild(categoryHeader);
 
@@ -383,24 +350,8 @@ class CatalogoManager {
           </div>
           ${product.notes ? `<div class="product-notes">${product.notes}</div>` : ''}
         </div>
-        <div class="product-actions">
-          <button class="btn-icon btn-edit" data-product-id="${product.id}">✏️</button>
-          <button class="btn-icon btn-delete" data-product-id="${product.id}">🗑️</button>
-        </div>
       </div>
     `;
-
-    // Add event listeners
-    const editBtn = card.querySelector('.btn-edit');
-    const deleteBtn = card.querySelector('.btn-delete');
-
-    if (editBtn) {
-      editBtn.addEventListener('click', () => this.editProduct(product.id));
-    }
-
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', () => this.deleteProduct(product.id));
-    }
 
     return card;
   }
@@ -513,215 +464,6 @@ class CatalogoManager {
   }
 
   // CRUD operations
-  showAddCategoryForm() {
-    const name = prompt('Nome categoria:');
-    if (!name) return;
-
-    const colorHex = prompt('Colore esadecimale (es. #3b82f6):');
-    if (!colorHex || !/^#[0-9A-Fa-f]{6}$/.test(colorHex)) {
-      showToast('Colore non valido', 'error');
-      return;
-    }
-
-    this.addCategory(name.trim(), colorHex);
-  }
-
-  showAddProductForm() {
-    const name = prompt('Nome prodotto:');
-    if (!name) return;
-
-    const categoryId = prompt(`ID categoria (${this.categories.map(c => c.id).join(', ')}):`);
-    if (!categoryId || !this.categories.find(c => c.id === categoryId)) {
-      showToast('Categoria non valida', 'error');
-      return;
-    }
-
-    const unit = prompt('Unità di misura (opzionale):') || '';
-    const notes = prompt('Note (opzionale):') || '';
-
-    this.addProduct(name.trim(), categoryId, unit, notes);
-  }
-
-  async addCategory(name, colorHex) {
-    try {
-      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-      
-      if (this.categories.find(c => c.id === id)) {
-        showToast('ID categoria già esistente', 'error');
-        return;
-      }
-
-      const newCategory = {
-        id,
-        name,
-        colorHex,
-        order: this.categories.length + 1,
-        active: true
-      };
-
-      this.categories.push(newCategory);
-      
-      if (productsLoader.useFirestore) {
-        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', id), newCategory);
-      }
-
-      this.renderCategoryFilters();
-      this.filterAndRenderProducts();
-      showToast('Categoria aggiunta', 'success');
-    } catch (error) {
-      console.error('Errore aggiunta categoria:', error);
-      showToast('Errore aggiunta categoria', 'error');
-    }
-  }
-
-  async addProduct(name, categoryId, unit, notes) {
-    try {
-      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-      
-      if (this.products.find(p => p.id === id)) {
-        showToast('ID prodotto già esistente', 'error');
-        return;
-      }
-
-      const newProduct = {
-        id,
-        name,
-        categoryId,
-        unit: unit || undefined,
-        notes: notes || undefined,
-        active: true
-      };
-
-      this.products.push(newProduct);
-      
-      if (productsLoader.useFirestore) {
-        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', id), newProduct);
-      }
-
-      this.filterAndRenderProducts();
-      this.updateStats();
-      showToast('Prodotto aggiunto', 'success');
-    } catch (error) {
-      console.error('Errore aggiunta prodotto:', error);
-      showToast('Errore aggiunta prodotto', 'error');
-    }
-  }
-
-  async editCategory(categoryId) {
-    const category = this.categories.find(c => c.id === categoryId);
-    if (!category) return;
-
-    const newName = prompt('Nuovo nome:', category.name);
-    if (!newName) return;
-
-    const newColor = prompt('Nuovo colore:', category.colorHex);
-    if (!newColor || !/^#[0-9A-Fa-f]{6}$/.test(newColor)) {
-      showToast('Colore non valido', 'error');
-      return;
-    }
-
-    try {
-      category.name = newName.trim();
-      category.colorHex = newColor;
-
-      if (productsLoader.useFirestore) {
-        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', categoryId), category);
-      }
-
-      this.renderCategoryFilters();
-      this.filterAndRenderProducts();
-      showToast('Categoria modificata', 'success');
-    } catch (error) {
-      console.error('Errore modifica categoria:', error);
-      showToast('Errore modifica categoria', 'error');
-    }
-  }
-
-  async editProduct(productId) {
-    const product = this.products.find(p => p.id === productId);
-    if (!product) return;
-
-    const newName = prompt('Nuovo nome:', product.name);
-    if (!newName) return;
-
-    const newCategoryId = prompt(`Nuova categoria (${this.categories.map(c => c.id).join(', ')}):`, product.categoryId);
-    if (!newCategoryId || !this.categories.find(c => c.id === newCategoryId)) {
-      showToast('Categoria non valida', 'error');
-      return;
-    }
-
-    const newUnit = prompt('Unità di misura:', product.unit || '') || '';
-    const newNotes = prompt('Note:', product.notes || '') || '';
-
-    try {
-      product.name = newName.trim();
-      product.categoryId = newCategoryId;
-      product.unit = newUnit || undefined;
-      product.notes = newNotes || undefined;
-
-      if (productsLoader.useFirestore) {
-        await setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', productId), product);
-      }
-
-      this.filterAndRenderProducts();
-      showToast('Prodotto modificato', 'success');
-    } catch (error) {
-      console.error('Errore modifica prodotto:', error);
-      showToast('Errore modifica prodotto', 'error');
-    }
-  }
-
-  async deleteCategory(categoryId) {
-    const category = this.categories.find(c => c.id === categoryId);
-    if (!category) return;
-
-    const productsInCategory = this.products.filter(p => p.categoryId === categoryId);
-    if (productsInCategory.length > 0) {
-      showToast(`Impossibile eliminare: ci sono ${productsInCategory.length} prodotti in questa categoria`, 'error');
-      return;
-    }
-
-    if (!confirm(`Eliminare la categoria "${category.name}"?`)) return;
-
-    try {
-      this.categories = this.categories.filter(c => c.id !== categoryId);
-
-      if (productsLoader.useFirestore) {
-        await productsLoader.deleteFromFirestore('category', categoryId);
-      }
-
-      this.renderCategoryFilters();
-      this.filterAndRenderProducts();
-      this.updateStats();
-      showToast('Categoria eliminata', 'success');
-    } catch (error) {
-      console.error('Errore eliminazione categoria:', error);
-      showToast('Errore eliminazione categoria', 'error');
-    }
-  }
-
-  async deleteProduct(productId) {
-    const product = this.products.find(p => p.id === productId);
-    if (!product) return;
-
-    if (!confirm(`Eliminare il prodotto "${product.name}"?`)) return;
-
-    try {
-      this.products = this.products.filter(p => p.id !== productId);
-
-      if (productsLoader.useFirestore) {
-        await productsLoader.deleteFromFirestore('product', productId);
-      }
-
-      this.filterAndRenderProducts();
-      this.updateStats();
-      showToast('Prodotto eliminato', 'success');
-    } catch (error) {
-      console.error('Errore eliminazione prodotto:', error);
-      showToast('Errore eliminazione prodotto', 'error');
-    }
-  }
-
   exportData() {
     try {
       const data = productsLoader.exportToJSON();

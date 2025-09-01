@@ -278,51 +278,62 @@ class MagazzinoManager {
       notifDiv.className = `notification-item ${notification.read ? 'read' : ''}`;
       
       let message = '';
+      let details = '';
       let className = '';
       
       switch (notification.type) {
         case 'added':
-          message = `➕ Aggiunto: ${notification.name} (${notification.quantity})`;
+          message = `➕ Prodotto aggiunto`;
+          details = `${notification.name} - Qtà: ${notification.quantity}`;
           className = 'notification-added';
           break;
         case 'removed':
-          message = `➖ Rimosso: ${notification.name} (${notification.quantity})`;
+          message = `➖ Prodotto rimosso`;
+          details = `${notification.name} - Qtà: ${notification.quantity}`;
           className = 'notification-removed';
           break;
         case 'qtyChanged':
-          message = `🔄 Modificato: ${notification.name} (${notification.oldQuantity} → ${notification.newQuantity})`;
+          message = `🔄 Quantità modificata`;
+          details = `${notification.name}: ${notification.oldQuantity} → ${notification.newQuantity}`;
           className = 'notification-changed';
           break;
         case 'listSubmitted':
-          message = `📝 ${notification.message}`;
+          message = `📝 Lista inviata`;
+          details = `${notification.data?.itemsCount || 0} prodotti + ${notification.data?.extrasCount || 0} extra`;
           className = 'notification-success';
           break;
         case 'productChecked':
-          message = `✅ Preparato: ${notification.name}`;
+          message = `✅ Prodotto preparato`;
+          details = notification.name;
           className = 'notification-success';
           break;
         case 'productUnchecked':
-          message = `⏳ Da preparare: ${notification.name}`;
+          message = `⏳ Da preparare`;
+          details = notification.name;
           className = 'notification-warning';
           break;
         case 'extraChecked':
-          message = `✅ Extra preparato: ${notification.name}`;
+          message = `✅ Extra preparato`;
+          details = notification.name;
           className = 'notification-success';
           break;
         case 'extraUnchecked':
-          message = `⏳ Extra da preparare: ${notification.name}`;
+          message = `⏳ Extra da preparare`;
+          details = notification.name;
           className = 'notification-warning';
           break;
         default:
-          message = `📝 ${notification.type}: ${notification.name}`;
+          message = `📝 Modifica`;
+          details = `${notification.type}: ${notification.name}`;
           className = 'notification-changed';
       }
       
       notifDiv.classList.add(className);
       notifDiv.innerHTML = `
-        <div style="font-weight: 600; margin-bottom: 0.25rem;">${message}</div>
-        <div style="font-size: 0.75rem; opacity: 0.8;">
-          ${notification.timestamp.toDate().toLocaleString('it-IT')}
+        <div class="notification-message">${message}</div>
+        ${details ? `<div class="notification-details">${details}</div>` : ''}
+        <div class="notification-timestamp">
+          ${notification.timestamp.toDate().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
         </div>
       `;
       
@@ -758,6 +769,11 @@ class MagazzinoManager {
     const itemIndex = this.currentList.items.findIndex(item => item.id === productId);
     if (itemIndex === -1) return;
     
+    const product = this.products.find(p => p.id === productId);
+    if (product) {
+      await this.createCheckNotification(product.name, checked, 'product');
+    }
+    
     this.currentList.items[itemIndex].checked = checked;
     
     await this.saveChecklist();
@@ -768,6 +784,11 @@ class MagazzinoManager {
     if (!this.currentList || !this.currentList.extras) return;
     
     if (extraIndex < 0 || extraIndex >= this.currentList.extras.length) return;
+    
+    const extra = this.currentList.extras[extraIndex];
+    if (extra) {
+      await this.createCheckNotification(extra.name, checked, 'extra');
+    }
     
     this.currentList.extras[extraIndex].checked = checked;
     
@@ -782,7 +803,6 @@ class MagazzinoManager {
       
       await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
       
-      showToast('Checklist aggiornata', 'success');
     } catch (error) {
       console.error('Errore salvataggio checklist:', error);
       showToast('Errore durante il salvataggio', 'error');

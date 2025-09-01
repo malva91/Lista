@@ -754,7 +754,6 @@ class ListaManager {
       const notificationId = `submission_${Date.now()}`;
       await setDoc(doc(db, 'notifications', notifDocId, 'entries', notificationId), {
         type: 'listSubmitted',
-        message: `Lista inviata con ${totalItems} prodotti`,
         timestamp: Timestamp.now(),
         read: false,
         data: {
