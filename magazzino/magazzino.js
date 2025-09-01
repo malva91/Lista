@@ -176,38 +176,57 @@ class MagazzinoManager {
   preservePreparedState(previousList, newList) {
     if (!previousList.items || !newList.items) return;
     
-    // Crea una mappa degli stati precedenti
+    // Crea una mappa degli stati precedenti con quantità
     const previousStates = new Map();
     previousList.items.forEach(item => {
-      if (item.checked) {
-        previousStates.set(item.id, item.quantity);
-      }
+      previousStates.set(item.id, {
+        quantity: item.quantity,
+        checked: item.checked || false
+      });
     });
     
-    // Mantieni lo stato preparato se la quantità non è cambiata
+    // Mantieni lo stato preparato SOLO se la quantità non è cambiata
+    // Se la quantità è cambiata, il prodotto torna automaticamente "da preparare"
     newList.items.forEach(item => {
-      if (previousStates.has(item.id)) {
-        const previousQuantity = previousStates.get(item.id);
-        if (item.quantity === previousQuantity) {
+      const previousState = previousStates.get(item.id);
+      if (previousState) {
+        if (previousState.quantity === item.quantity && previousState.checked) {
+          // Quantità uguale e precedentemente preparato -> mantieni preparato
           item.checked = true;
+        } else if (previousState.quantity !== item.quantity && previousState.checked) {
+          // Quantità cambiata e precedentemente preparato -> torna da preparare
+          item.checked = false;
+          console.log(`🔄 ${item.id}: quantità cambiata (${previousState.quantity} → ${item.quantity}), reset stato preparato`);
+        } else {
+          // Mantieni lo stato precedente se non era preparato
+          item.checked = previousState.checked;
         }
       }
     });
     
-    // Mantieni anche gli extra preparati se non sono cambiati
+    // Stessa logica per gli extra
     if (previousList.extras && newList.extras) {
       const previousExtras = new Map();
       previousList.extras.forEach(extra => {
-        if (extra.checked) {
-          previousExtras.set(extra.name, extra.quantity);
-        }
+        previousExtras.set(extra.name, {
+          quantity: extra.quantity,
+          checked: extra.checked || false
+        });
       });
       
       newList.extras.forEach(extra => {
-        if (previousExtras.has(extra.name)) {
-          const previousQuantity = previousExtras.get(extra.name);
-          if (extra.quantity === previousQuantity) {
+        const previousState = previousExtras.get(extra.name);
+        if (previousState) {
+          if (previousState.quantity === extra.quantity && previousState.checked) {
+            // Quantità uguale e precedentemente preparato -> mantieni preparato
             extra.checked = true;
+          } else if (previousState.quantity !== extra.quantity && previousState.checked) {
+            // Quantità cambiata e precedentemente preparato -> torna da preparare
+            extra.checked = false;
+            console.log(`🔄 Extra ${extra.name}: quantità cambiata (${previousState.quantity} → ${extra.quantity}), reset stato preparato`);
+          } else {
+            // Mantieni lo stato precedente se non era preparato
+            extra.checked = previousState.checked;
           }
         }
       });

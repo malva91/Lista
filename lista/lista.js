@@ -845,6 +845,13 @@ class ListaManager {
         if (previousQuantity && previousQuantity !== newQuantity) {
           const product = this.products.find(p => p.id === productId);
           if (product) {
+            // Reset stato preparato se la quantità è cambiata
+            const itemIndex = newList.items.findIndex(item => item.id === productId);
+            if (itemIndex !== -1 && newList.items[itemIndex].checked) {
+              newList.items[itemIndex].checked = false;
+              console.log(`🔄 Reset stato preparato per ${product.name} (quantità cambiata: ${previousQuantity} → ${newQuantity})`);
+            }
+            
             notifications.push({
               type: 'quantityChanged',
               productId: productId,
@@ -892,6 +899,13 @@ class ListaManager {
       newExtras.forEach((newQuantity, name) => {
         const previousQuantity = previousExtras.get(name);
         if (previousQuantity && previousQuantity !== newQuantity) {
+          // Reset stato preparato se la quantità è cambiata
+          const extraIndex = newList.extras.findIndex(extra => extra.name === name);
+          if (extraIndex !== -1 && newList.extras[extraIndex].checked) {
+            newList.extras[extraIndex].checked = false;
+            console.log(`🔄 Reset stato preparato per extra ${name} (quantità cambiata: ${previousQuantity} → ${newQuantity})`);
+          }
+          
           notifications.push({
             type: 'extraQuantityChanged',
             extraName: name,
