@@ -607,15 +607,10 @@ class MagazzinoManager {
     const itemIndex = this.currentList.items.findIndex(item => item.id === productId);
     if (itemIndex === -1) return;
     
-    const product = this.products.find(p => p.id === productId);
-    if (!product) return;
-    
     this.currentList.items[itemIndex].checked = checked;
     
-    // Create notification for this action
-    await this.createCheckNotification(product.name, checked, 'product');
-    
     await this.saveChecklist();
+    this.renderChecklist();
   }
 
   async toggleExtraCheck(extraIndex, checked) {
@@ -634,9 +629,12 @@ class MagazzinoManager {
       const week = getWeekString(this.selectedDate);
       const day = formatDate(this.selectedDate);
       
+      this.currentList.lastModifiedBy = this.getClientId();
+      this.currentList.updatedAt = Timestamp.now();
+      
       await setDoc(doc(db, 'weeks', week, 'lists', day), this.currentList);
       
-      showToast('Checklist aggiornata', 'success');
+      // Don't show toast for individual saves, only for bulk operations
     } catch (error) {
       console.error('Errore salvataggio checklist:', error);
       showToast('Errore durante il salvataggio', 'error');
