@@ -607,10 +607,15 @@ class MagazzinoManager {
     const itemIndex = this.currentList.items.findIndex(item => item.id === productId);
     if (itemIndex === -1) return;
     
+    const product = this.products.find(p => p.id === productId);
+    if (!product) return;
+    
     this.currentList.items[itemIndex].checked = checked;
     
+    // Create notification for this action
+    await this.createCheckNotification(product.name, checked, 'product');
+    
     await this.saveChecklist();
-    this.renderChecklist();
   }
 
   async toggleExtraCheck(extraIndex, checked) {
