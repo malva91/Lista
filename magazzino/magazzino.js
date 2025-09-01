@@ -1,6 +1,6 @@
 import { db } from '../shared/firebase.js?v=1.3.0';
 import { 
-  collection, doc, getDocs, getDoc, setDoc, onSnapshot, deleteDoc,
+  collection, doc, getDocs, getDoc, setDoc, updateDoc, onSnapshot, deleteDoc,
   query, where, orderBy, Timestamp 
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { formatDate, getWeekString, getDayName, showToast, getContrastColor } from '../shared/utils.js?v=1.3.0';
@@ -109,13 +109,18 @@ class MagazzinoManager {
         (docSnapshot) => {
           if (docSnapshot.exists()) {
             const newData = docSnapshot.data();
-            const hadList = this.currentList !== null;
+            const previousList = this.currentList;
             this.currentList = newData;
+            
+            // Mantieni stato preparato se la quantità non è cambiata
+            if (previousList && previousList.items && newData.items) {
+              this.preservePreparedState(previousList, newData);
+            }
             
             this.renderChecklist();
             
             // Show notification if list was just submitted
-            if (!hadList && newData.status === 'submitted') {
+            if (!previousList && newData.status === 'submitted') {
               showToast('Nuova lista ricevuta!', 'success');
             }
           } else {
@@ -147,6 +152,47 @@ class MagazzinoManager {
       console.error('Errore caricamento lista:', error);
       this.showError('Errore nel caricamento della lista');
       document.getElementById('loadingList').classList.add('hidden');
+    }
+  }
+
+  preservePreparedState(previousList, newList) {
+    if (!previousList.items || !newList.items) return;
+    
+    // Crea una mappa degli stati precedenti
+    const previousStates = new Map();
+    previousList.items.forEach(item => {
+      if (item.checked) {
+        previousStates.set(item.id, item.quantity);
+      }
+    });
+    
+    // Mantieni lo stato preparato se la quantità non è cambiata
+    newList.items.forEach(item => {
+      if (previousStates.has(item.id)) {
+        const previousQuantity = previousStates.get(item.id);
+        if (item.quantity === previousQuantity) {
+          item.checked = true;
+        }
+      }
+    });
+    
+    // Mantieni anche gli extra preparati se non sono cambiati
+    if (previousList.extras && newList.extras) {
+      const previousExtras = new Map();
+      previousList.extras.forEach(extra => {
+        if (extra.checked) {
+          previousExtras.set(extra.name, extra.quantity);
+        }
+      });
+      
+      newList.extras.forEach(extra => {
+        if (previousExtras.has(extra.name)) {
+          const previousQuantity = previousExtras.get(extra.name);
+          if (extra.quantity === previousQuantity) {
+            extra.checked = true;
+          }
+        }
+      });
     }
   }
 
@@ -310,15 +356,11 @@ class MagazzinoManager {
       const batch = [];
       for (const notification of this.notifications) {
         if (!notification.read) {
-          batch.push(
-            updateDoc(doc(db, 'notifications', notifDocId, 'entries', notification.id), {
-              read: true
-            })
-          );
+          await updateDoc(doc(db, 'notifications', notifDocId, 'entries', notification.id), {
+            read: true
+          });
         }
       }
-      
-      await Promise.all(batch);
       
       showToast('Tutte le notifiche segnate come lette', 'success');
     } catch (error) {
@@ -342,6 +384,15 @@ class MagazzinoManager {
     emptyState.classList.add('hidden');
     
     container.innerHTML = '';
+    
+    // Calcola statistiche completamento
+    const completionStats = this.calculateCompletionStats();
+    
+    // Aggiungi indicatore generale di completamento
+    if (completionStats.totalCategories > 0) {
+      const completionIndicator = this.createCompletionIndicator(completionStats);
+      container.appendChild(completionIndicator);
+    }
     
     // Group products by category
     const groupedProducts = new Map();
@@ -386,6 +437,105 @@ class MagazzinoManager {
     }
   }
 
+  calculateCompletionStats() {
+    if (!this.currentList || !this.currentList.items) {
+      return { totalCategories: 0, completedCategories: 0, totalItems: 0, completedItems: 0, totalExtras: 0, completedExtras: 0 };
+    }
+    
+    // Raggruppa prodotti per categoria
+    const categoryStats = new Map();
+    
+    this.currentList.items.forEach(item => {
+      const product = this.products.find(p => p.id === item.id);
+      if (product) {
+        if (!categoryStats.has(product.categoryId)) {
+          categoryStats.set(product.categoryId, { total: 0, completed: 0 });
+        }
+        const stats = categoryStats.get(product.categoryId);
+        stats.total++;
+        if (item.checked) {
+          stats.completed++;
+        }
+      }
+    });
+    
+    const totalCategories = categoryStats.size;
+    const completedCategories = Array.from(categoryStats.values()).filter(stats => stats.completed === stats.total).length;
+    
+    const totalItems = this.currentList.items.length;
+    const completedItems = this.currentList.items.filter(item => item.checked).length;
+    
+    const totalExtras = this.currentList.extras ? this.currentList.extras.length : 0;
+    const completedExtras = this.currentList.extras ? this.currentList.extras.filter(extra => extra.checked).length : 0;
+    
+    return {
+      totalCategories,
+      completedCategories,
+      totalItems,
+      completedItems,
+      totalExtras,
+      completedExtras,
+      categoryStats
+    };
+  }
+
+  createCompletionIndicator(stats) {
+    const indicator = document.createElement('div');
+    indicator.className = 'completion-indicator';
+    indicator.style.cssText = `
+      background: var(--bg-card);
+      border: 2px solid var(--border-color);
+      border-radius: var(--border-radius-lg);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+      box-shadow: var(--shadow-md);
+    `;
+    
+    const overallProgress = stats.totalItems > 0 ? Math.round((stats.completedItems / stats.totalItems) * 100) : 0;
+    const categoryProgress = stats.totalCategories > 0 ? Math.round((stats.completedCategories / stats.totalCategories) * 100) : 0;
+    
+    let progressColor = '#ef4444'; // Rosso per 0-30%
+    if (overallProgress >= 70) progressColor = '#10b981'; // Verde per 70-100%
+    else if (overallProgress >= 40) progressColor = '#f59e0b'; // Giallo per 40-69%
+    
+    indicator.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+        <h3 style="color: var(--text-primary); margin: 0;">📊 Stato Completamento</h3>
+        <div style="font-size: var(--text-2xl);">${overallProgress === 100 ? '🎉' : overallProgress >= 70 ? '✅' : overallProgress >= 40 ? '⚠️' : '⏳'}</div>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
+        <div style="text-align: center; background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--border-radius);">
+          <div style="font-size: var(--text-xl); font-weight: 700; color: ${progressColor};">${stats.completedItems}/${stats.totalItems}</div>
+          <div style="font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600;">PRODOTTI</div>
+        </div>
+        
+        <div style="text-align: center; background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--border-radius);">
+          <div style="font-size: var(--text-xl); font-weight: 700; color: ${categoryProgress >= 70 ? '#10b981' : categoryProgress >= 40 ? '#f59e0b' : '#ef4444'};">${stats.completedCategories}/${stats.totalCategories}</div>
+          <div style="font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600;">CATEGORIE</div>
+        </div>
+        
+        ${stats.totalExtras > 0 ? `
+        <div style="text-align: center; background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--border-radius);">
+          <div style="font-size: var(--text-xl); font-weight: 700; color: ${stats.completedExtras === stats.totalExtras ? '#10b981' : '#f59e0b'};">${stats.completedExtras}/${stats.totalExtras}</div>
+          <div style="font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600;">EXTRA</div>
+        </div>
+        ` : ''}
+      </div>
+      
+      <div style="background: var(--bg-secondary); border-radius: var(--border-radius); overflow: hidden; margin-bottom: var(--spacing-sm);">
+        <div style="height: 8px; background: ${progressColor}; width: ${overallProgress}%; transition: all 0.5s ease;"></div>
+      </div>
+      
+      <div style="text-align: center; font-size: var(--text-sm); color: var(--text-secondary);">
+        <strong>${overallProgress}%</strong> completato
+        ${overallProgress === 100 ? ' - 🎉 Lista completata!' : ''}
+      </div>
+    `;
+    
+    return indicator;
+  }
+
   createCategoryChecklistSection(categoryId, products) {
     const category = this.categories.find(c => c.id === categoryId);
     if (!category) return null;
@@ -419,14 +569,15 @@ class MagazzinoManager {
     
     const checkedCount = products.filter(p => p.checked).length;
     const totalCount = products.length;
+    const isCompleted = checkedCount === totalCount;
     
     categoryHeader.innerHTML = `
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <span style="transition: transform 0.3s; ${isCollapsed ? 'transform: rotate(-90deg);' : ''}">▼</span>
-        <span>📂</span>
+        <span>${isCompleted ? '✅' : '📂'}</span>
         <span>${category.name}</span>
       </div>
-      <span style="font-size: 0.8rem; opacity: 0.8;">${checkedCount}/${totalCount}</span>
+      <span style="font-size: 0.8rem; opacity: 0.8; color: ${isCompleted ? '#10b981' : 'inherit'}; font-weight: ${isCompleted ? '700' : '400'};">${checkedCount}/${totalCount}</span>
     `;
     
     categoryHeader.addEventListener('click', () => {

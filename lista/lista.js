@@ -703,6 +703,7 @@ class ListaManager {
       if (isSubmit) {
         this.currentList.submittedAt = Timestamp.now();
         this.currentList.status = 'submitted';
+        this.currentList.version = Date.now(); // Versione per tracking modifiche
         
         // Create notification for magazzino
         await this.createSubmissionNotification();
