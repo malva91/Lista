@@ -3,6 +3,7 @@ import { collection, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/fire
 import { showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.3.0';
 import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.3.0';
 import { productsLoader } from '../shared/products-loader.js?v=1.3.0';
+import { reportError } from '../shared/error-handler.js?v=1.3.0';
 
 class CatalogoManager {
   constructor() {
@@ -429,6 +430,12 @@ class CatalogoManager {
     if (!editor) return;
 
     try {
+      // Controlla se l'editor è vuoto
+      if (!editor.value.trim()) {
+        showToast('Editor vuoto, carica prima i dati', 'warning');
+        return;
+      }
+      
       const data = JSON.parse(editor.value);
       productsLoader.validateProductsData(data);
 
@@ -446,7 +453,15 @@ class CatalogoManager {
       showToast('Catalogo salvato con successo!', 'success');
     } catch (error) {
       console.error('Errore salvataggio:', error);
-      showToast(`Errore salvataggio: ${error.message}`, 'error');
+      
+      // Errori più specifici
+      if (error instanceof SyntaxError) {
+        showToast('JSON non valido: controlla la sintassi', 'error');
+      } else if (error.message.includes('Campo')) {
+        showToast(`Validazione fallita: ${error.message}`, 'error');
+      } else {
+        showToast(`Errore salvataggio: ${error.message}`, 'error');
+      }
     }
   }
 
@@ -454,6 +469,12 @@ class CatalogoManager {
   exportData() {
     try {
       const data = productsLoader.exportToJSON();
+      
+      if (!data.categories?.length && !data.products?.length) {
+        showToast('Nessun dato da esportare', 'warning');
+        return;
+      }
+      
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
 

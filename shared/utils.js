@@ -1,6 +1,9 @@
 // Utility functions for the product management system
 // Version: 1.3.0 - Simplified
 
+// Import error handler
+import { errorHandler, reportError } from './error-handler.js?v=1.3.0';
+
 // Mobile detection
 export function isMobile() {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -27,7 +30,20 @@ export function safeAddEventListener(element, event, handler, options = {}) {
   }
   
   try {
-    element.addEventListener(event, handler, options);
+    // Wrapper per catturare errori negli event handler
+    const wrappedHandler = (e) => {
+      try {
+        handler(e);
+      } catch (error) {
+        reportError(`Errore in event handler ${event}`, { 
+          element: element.tagName, 
+          error: error.message 
+        });
+        throw error;
+      }
+    };
+    
+    element.addEventListener(event, wrappedHandler, options);
   } catch (error) {
     console.warn(`Failed to add event listener for ${event}:`, error);
   }
@@ -119,6 +135,7 @@ export function getDayName(date) {
 // Toast notifications
 let toastContainer = null;
 let activeToasts = [];
+const maxToasts = 3;
 
 function createToastContainer() {
   if (!toastContainer) {
@@ -142,10 +159,12 @@ function createToastContainer() {
 }
 
 export function showToast(message, type = 'info', duration = 2500) {
+  if (!message) return;
+  
   const container = createToastContainer();
   
   // Limit number of active toasts
-  if (activeToasts.length >= 3) {
+  if (activeToasts.length >= maxToasts) {
     const oldestToast = activeToasts.shift();
     if (oldestToast && oldestToast.parentNode) {
       oldestToast.classList.remove('toast-show');
@@ -159,7 +178,11 @@ export function showToast(message, type = 'info', duration = 2500) {
   
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.textContent = message;
+  
+  // Sanitizza il messaggio
+  const sanitizedMessage = message.toString().substring(0, 200);
+  toast.textContent = sanitizedMessage;
+  
   toast.style.pointerEvents = 'auto';
   toast.style.cssText += `
     max-width: 280px;
@@ -191,12 +214,15 @@ export function showToast(message, type = 'info', duration = 2500) {
   };
   
   // Auto remove
-  setTimeout(() => {
+  const timeoutId = setTimeout(() => {
     removeToast();
   }, duration);
   
   // Click to dismiss
-  toast.addEventListener('click', removeToast);
+  toast.addEventListener('click', () => {
+    clearTimeout(timeoutId);
+    removeToast();
+  });
 }
 
 // Debounce utility
@@ -298,11 +324,17 @@ export function initHamburgerMenu() {
   if (!dropdown) {
     dropdown = document.createElement('div');
     dropdown.className = 'dropdown-menu';
+    
+    // Determina il percorso base in base alla posizione corrente
+    const currentPath = window.location.pathname;
+    const isInSubfolder = currentPath.includes('/lista/') || currentPath.includes('/magazzino/') || currentPath.includes('/catalogo/');
+    const basePath = isInSubfolder ? '../' : './';
+    
     dropdown.innerHTML = `
-      <a href="/" class="dropdown-item">🏠 Home</a>
-      <a href="/lista/" class="dropdown-item">📝 Lista Dipendenti</a>
-      <a href="/magazzino/" class="dropdown-item">📦 Magazzino</a>
-      <a href="/catalogo/" class="dropdown-item">📋 Gestione Catalogo</a>
+      <a href="${basePath}" class="dropdown-item">🏠 Home</a>
+      <a href="${basePath}lista/" class="dropdown-item">📝 Lista Dipendenti</a>
+      <a href="${basePath}magazzino/" class="dropdown-item">📦 Magazzino</a>
+      <a href="${basePath}catalogo/" class="dropdown-item">📋 Gestione Catalogo</a>
     `;
     document.body.appendChild(dropdown);
   }

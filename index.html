@@ -114,13 +114,26 @@
             links.forEach(link => {
                 const preloadOnInteraction = () => {
                     const href = link.getAttribute('href');
-                    if (href && !href.startsWith('http')) {
+                    if (href && !href.startsWith('http') && !href.startsWith('#')) {
                         // Preload the main script of the target page
                         const scriptPreload = document.createElement('link');
                         scriptPreload.rel = 'modulepreload';
-                        scriptPreload.href = href + (href.endsWith('/') ? '' : '/') + 
-                                           href.split('/').filter(Boolean).pop() + '.js';
-                        document.head.appendChild(scriptPreload);
+                        
+                        // Costruisci il percorso corretto per il JS
+                        let jsPath;
+                        if (href.endsWith('/')) {
+                            const folderName = href.slice(0, -1).split('/').pop();
+                            jsPath = href + folderName + '.js?v=1.3.0';
+                        } else {
+                            jsPath = href + '/' + href.split('/').pop() + '.js?v=1.3.0';
+                        }
+                        
+                        scriptPreload.href = jsPath;
+                        
+                        // Evita duplicati
+                        if (!document.querySelector(`link[href="${jsPath}"]`)) {
+                            document.head.appendChild(scriptPreload);
+                        }
                     }
                 };
                 

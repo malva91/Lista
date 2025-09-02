@@ -6,6 +6,7 @@ import {
 import { formatDate, getWeekString, getDayName, showToast, getContrastColor } from '../shared/utils.js?v=1.3.0';
 import { safeQuerySelector, safeAddEventListener, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.3.0';
 import { productsLoader } from '../shared/products-loader.js?v=1.3.0';
+import { reportError } from '../shared/error-handler.js?v=1.3.0';
 
 class MagazzinoManager {
   constructor() {
@@ -866,7 +867,8 @@ class MagazzinoManager {
     this.currentList.items[itemIndex].checked = checked;
     
     await this.saveChecklist();
-    this.renderChecklist();
+    // Non ri-renderizzare tutto, aggiorna solo la card specifica
+    this.updateProductCardState(productId, checked);
   }
 
   async toggleExtraCheck(extraIndex, checked) {
@@ -882,7 +884,66 @@ class MagazzinoManager {
     this.currentList.extras[extraIndex].checked = checked;
     
     await this.saveChecklist();
-    this.renderChecklist();
+    // Non ri-renderizzare tutto, aggiorna solo la card specifica
+    this.updateExtraCardState(extraIndex, checked);
+  }
+
+  updateProductCardState(productId, checked) {
+    const checkbox = document.querySelector(`input[data-product-id="${productId}"]`);
+    if (checkbox) {
+      checkbox.checked = checked;
+      const card = checkbox.closest('.product-card');
+      if (card) {
+        card.classList.toggle('checked', checked);
+        
+        // Aggiorna il testo del label
+        const label = checkbox.nextElementSibling;
+        if (label) {
+          label.textContent = checked ? '✅ Preparato' : '⏳ Da preparare';
+        }
+        
+        // Aggiorna lo stile del nome prodotto
+        const productName = card.querySelector('div[style*="font-weight: 600"]');
+        if (productName) {
+          if (checked) {
+            productName.style.textDecoration = 'line-through';
+            productName.style.opacity = '0.7';
+          } else {
+            productName.style.textDecoration = 'none';
+            productName.style.opacity = '1';
+          }
+        }
+      }
+    }
+  }
+
+  updateExtraCardState(extraIndex, checked) {
+    const checkbox = document.querySelector(`input[data-extra-index="${extraIndex}"]`);
+    if (checkbox) {
+      checkbox.checked = checked;
+      const card = checkbox.closest('.product-card');
+      if (card) {
+        card.classList.toggle('checked', checked);
+        
+        // Aggiorna il testo del label
+        const label = checkbox.nextElementSibling;
+        if (label) {
+          label.textContent = checked ? '✅ Preparato' : '⏳ Da preparare';
+        }
+        
+        // Aggiorna lo stile del nome extra
+        const extraName = card.querySelector('div[style*="font-weight: 600"]');
+        if (extraName) {
+          if (checked) {
+            extraName.style.textDecoration = 'line-through';
+            extraName.style.opacity = '0.7';
+          } else {
+            extraName.style.textDecoration = 'none';
+            extraName.style.opacity = '1';
+          }
+        }
+      }
+    }
   }
 
   async saveChecklist() {

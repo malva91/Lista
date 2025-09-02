@@ -4,7 +4,7 @@
  */
 
 import { db } from './firebase.js?v=1.3.0';
-import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 class ProductsLoader {
   constructor() {
@@ -158,7 +158,7 @@ class ProductsLoader {
   }
 
   async loadFromJSON() {
-    const response = await fetch('/prodotti.json?v=1.3.0');
+    const response = await fetch('../prodotti.json?v=1.3.0');
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -261,14 +261,27 @@ class ProductsLoader {
   // Metodi per salvare su Firestore
   async saveToFirestore(categories, products) {
     try {
+      // Aggiungi timestamp di aggiornamento
+      const timestamp = Timestamp.now();
+      
       // Salva categorie
-      const categoryPromises = categories.map(category => 
-        setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', category.id), category)
+      const categoryPromises = categories.map(category => {
+        const categoryData = {
+          ...category,
+          lastUpdated: timestamp
+        };
+        return setDoc(doc(db, 'prodottiCatalogo', 'data', 'categories', category.id), categoryData);
+      }
       );
 
       // Salva prodotti
-      const productPromises = products.map(product => 
-        setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', product.id), product)
+      const productPromises = products.map(product => {
+        const productData = {
+          ...product,
+          lastUpdated: timestamp
+        };
+        return setDoc(doc(db, 'prodottiCatalogo', 'data', 'products', product.id), productData);
+      }
       );
 
       await Promise.all([...categoryPromises, ...productPromises]);

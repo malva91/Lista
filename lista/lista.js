@@ -6,6 +6,7 @@ import {
 import { formatDate, getWeekString, getDayName, showToast, debounce, getContrastColor } from '../shared/utils.js?v=1.3.0';
 import { safeQuerySelector, safeAddEventListener, validateInput, initMobileUtils, initTheme, initHamburgerMenu } from '../shared/utils.js?v=1.3.0';
 import { productsLoader } from '../shared/products-loader.js?v=1.3.0';
+import { reportError } from '../shared/error-handler.js?v=1.3.0';
 
 class ListaManager {
   constructor() {
@@ -252,6 +253,9 @@ class ListaManager {
       
       if (listDoc.exists()) {
         this.currentList = listDoc.data();
+        // Assicurati che la struttura sia corretta
+        if (!this.currentList.items) this.currentList.items = [];
+        if (!this.currentList.extras) this.currentList.extras = [];
       } else {
         this.currentList = { items: [], extras: [] };
       }
@@ -261,6 +265,8 @@ class ListaManager {
     } catch (error) {
       console.error('Errore caricamento lista:', error);
       this.currentList = { items: [], extras: [] };
+      this.renderProducts();
+      this.renderExtras();
     }
   }
 
@@ -571,6 +577,11 @@ class ListaManager {
     const qtyValidation = validateInput(newQuantity, 'number', { min: 0, max: 999 });
     if (!qtyValidation.valid) {
       showToast('Quantità non valida', 'error');
+      // Ripristina il valore precedente nell'input
+      const qtyInput = document.querySelector(`.qty-input[data-product-id="${productId}"]`);
+      if (qtyInput) {
+        qtyInput.value = this.getCurrentQuantity(productId);
+      }
       return;
     }
     
@@ -599,7 +610,9 @@ class ListaManager {
       const day = formatDate(this.selectedDate);
       localStorage.setItem(`list-${week}-${day}`, JSON.stringify(this.currentList));
     } catch (error) {
-      console.warn('Errore salvataggio locale:', error);
+      console.warn('Errore salvataggio locale (storage pieno?):', error);
+      // Prova a pulire storage vecchio
+      this.cleanupLocalStorage();
     }
   }
   
@@ -636,28 +649,34 @@ class ListaManager {
     const nameValidation = validateInput(nameInput.value, 'text', { min: 2, max: 100, required: true });
     if (!nameValidation.valid) {
       showToast(nameValidation.error, 'error');
+      nameInput.focus();
       return;
     }
     
     const qtyValidation = validateInput(qtyInput.value, 'number', { min: 1, max: 999, required: true });
     if (!qtyValidation.valid) {
       showToast(qtyValidation.error, 'error');
+      qtyInput.focus();
       return;
     }
     
     const name = nameValidation.value;
     const qty = qtyValidation.value;
     
+    // Controlla se esiste già un extra con lo stesso nome
     const existingIndex = this.currentList.extras.findIndex(extra => extra.name === name);
     
     if (existingIndex !== -1) {
       this.currentList.extras[existingIndex].quantity += qty;
+      showToast(`Quantità aggiornata per ${name}`, 'info');
     } else {
       this.currentList.extras.push({ name, quantity: qty });
+      showToast(`Aggiunto ${name}`, 'success');
     }
     
     nameInput.value = '';
     qtyInput.value = '';
+    nameInput.focus(); // Mantieni il focus per aggiungere altri extra
     this.renderExtras();
     
     // Save to localStorage
@@ -724,6 +743,12 @@ class ListaManager {
 
   async saveList(isSubmit = false) {
     try {
+      // Validazione prima del salvataggio
+      if (!this.currentList || (!this.currentList.items?.length && !this.currentList.extras?.length)) {
+        showToast('Lista vuota, impossibile salvare', 'warning');
+        return;
+      }
+      
       this.isUpdatingFromFirestore = true;
       
       const week = getWeekString(this.selectedDate);
@@ -1041,6 +1066,37 @@ class ListaManager {
   destroy() {
     if (this.listListener) {
       this.listListener();
+    }
+  }
+
+  // Pulizia localStorage per evitare overflow
+  cleanupLocalStorage() {
+    try {
+      const keys = Object.keys(localStorage);
+      const listKeys = keys.filter(key => key.startsWith('list-'));
+      
+      // Ordina per data e mantieni solo gli ultimi 7 giorni
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 7);
+      
+      listKeys.forEach(key => {
+        try {
+          const parts = key.split('-');
+          if (parts.length >= 4) {
+            const dateStr = parts.slice(-3).join('-');
+            const itemDate = new Date(dateStr);
+            if (itemDate < cutoffDate) {
+              localStorage.removeItem(key);
+              console.log(`🧹 Rimosso dal localStorage: ${key}`);
+            }
+          }
+        } catch (error) {
+          // Se non riusciamo a parsare la data, rimuovi l'item
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (error) {
+      console.error('Errore pulizia localStorage:', error);
     }
   }
 }
